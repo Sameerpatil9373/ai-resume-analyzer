@@ -26,8 +26,14 @@ const uploadResume = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // Ensure user ID is available from authMiddleware
-    if (!req.user || !req.user.id) {
+    // Ensure user ID is available from authMiddleware (support multiple payload shapes)
+    const userId =
+      req.user?.id ??
+      req.user?.userId ??
+      req.user?._id ??
+      req.user?.user?.id;
+
+    if (!req.user || !userId) {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
@@ -48,7 +54,7 @@ const uploadResume = async (req, res) => {
 
     // CHANGE: Added userId to link resume to the logged-in user
     const savedResume = await Resume.create({
-      userId: req.user.id, 
+      userId,
       fileName: req.file.originalname,
       extractedText,
       skillsDetected: detectedSkills,
@@ -74,7 +80,13 @@ const uploadResume = async (req, res) => {
 const getAllResumes = async (req, res) => {
   try {
     // CHANGE: Filter by userId so users only see their own history
-    const resumes = await Resume.find({ userId: req.user.id }).sort({ createdAt: -1 });
+    const userId =
+      req.user?.id ??
+      req.user?.userId ??
+      req.user?._id ??
+      req.user?.user?.id;
+
+    const resumes = await Resume.find({ userId }).sort({ createdAt: -1 });
 
     res.status(200).json({
       count: resumes.length,
@@ -102,7 +114,13 @@ const matchResume = async (req, res) => {
     }
 
     // CHANGE: Ensure user owns the resume being matched
-    const resume = await Resume.findOne({ _id: resumeId, userId: req.user.id });
+    const userId =
+      req.user?.id ??
+      req.user?.userId ??
+      req.user?._id ??
+      req.user?.user?.id;
+
+    const resume = await Resume.findOne({ _id: resumeId, userId });
 
     if (!resume) {
       return res.status(404).json({
@@ -132,7 +150,13 @@ const getResumeSummary = async (req, res) => {
   try {
     const { id } = req.params;
     // Ensure ownership
-    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
+    const userId =
+      req.user?.id ??
+      req.user?.userId ??
+      req.user?._id ??
+      req.user?.user?.id;
+
+    const resume = await Resume.findOne({ _id: id, userId });
 
     if (!resume) {
       return res.status(404).json({ message: "Resume not found" });
@@ -148,7 +172,13 @@ const getResumeSummary = async (req, res) => {
 const getInterviewQuestions = async (req, res) => {
   try {
     const { id } = req.params;
-    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
+    const userId =
+      req.user?.id ??
+      req.user?.userId ??
+      req.user?._id ??
+      req.user?.user?.id;
+
+    const resume = await Resume.findOne({ _id: id, userId });
 
     if (!resume) {
       return res.status(404).json({ message: "Resume not found" });
@@ -164,7 +194,13 @@ const getInterviewQuestions = async (req, res) => {
 const getRoleExplanation = async (req, res) => {
   try {
     const { id } = req.params;
-    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
+    const userId =
+      req.user?.id ??
+      req.user?.userId ??
+      req.user?._id ??
+      req.user?.user?.id;
+
+    const resume = await Resume.findOne({ _id: id, userId });
 
     if (!resume) {
       return res.status(404).json({ message: "Resume not found" });

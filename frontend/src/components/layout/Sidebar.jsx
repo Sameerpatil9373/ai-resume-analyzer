@@ -12,19 +12,16 @@ import { getCurrentUser, logout } from "../../services/authService";
 
 const Sidebar = () => {
   const navigate = useNavigate();
-  const user = getCurrentUser(); // Get the logged-in user data
+  const user = getCurrentUser(); 
   
-  // Extract user details or fallback to defaults
   const userName = user?.user?.name || "Guest User";
   const userInitial = userName.charAt(0).toUpperCase();
 
-  // Handle logout functionality
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  // Refined active state with better shadows and colors
   const linkClass = ({ isActive }) =>
     `flex items-center gap-3 px-5 py-3.5 rounded-2xl transition-all duration-300 group ${
       isActive 
@@ -47,38 +44,37 @@ const Sidebar = () => {
 
       {/* Navigation */}
       <nav className="space-y-10 flex-1 overflow-y-auto no-scrollbar">
-        {/* Main Menu Section */}
         <div>
           <p className="text-[10px] uppercase tracking-[0.2em] text-gray-600 mb-5 px-5 font-black">Main Menu</p>
           <div className="space-y-2">
-            <NavLink to="/" className={linkClass}>
+            {/* UPDATED PATHS TO MATCH /app/* PREFIX */}
+            <NavLink to="/app/dashboard" className={linkClass}>
               <LayoutDashboard size={18} /> 
               <span className="text-sm">Dashboard</span>
             </NavLink>
-            <NavLink to="/upload" className={linkClass}>
+            <NavLink to="/app/upload" className={linkClass}>
               <Upload size={18} /> 
               <span className="text-sm">Upload Resume</span>
             </NavLink>
-            <NavLink to="/job-matching" className={linkClass}>
+            <NavLink to="/app/job-matching" className={linkClass}>
               <Briefcase size={18} /> 
               <span className="text-sm">Job Matching</span>
             </NavLink>
-            <NavLink to="/insights" className={linkClass}>
+            <NavLink to="/app/insights" className={linkClass}>
               <Sparkles size={18} /> 
               <span className="text-sm">AI Insights</span>
             </NavLink>
           </div>
         </div>
 
-        {/* Activity Section */}
         <div>
           <p className="text-[10px] uppercase tracking-[0.2em] text-gray-600 mb-5 px-5 font-black">Activity</p>
           <div className="space-y-2">
-            <NavLink to="/history" className={linkClass}>
+            <NavLink to="/app/history" className={linkClass}>
               <History size={18} /> 
               <span className="text-sm">History</span>
             </NavLink>
-            <NavLink to="/settings" className={linkClass}>
+            <NavLink to="/app/settings" className={linkClass}>
               <Settings size={18} /> 
               <span className="text-sm">Settings</span>
             </NavLink>
@@ -86,7 +82,7 @@ const Sidebar = () => {
         </div>
       </nav>
 
-      {/* Profile Section - Pinned to bottom with Logout button */}
+      {/* Profile Section */}
       <div className="mt-auto pt-6 border-t border-white/5 space-y-4">
         <div className="p-4 bg-indigo-500/5 rounded-[20px] flex items-center gap-3 border border-white/[0.03] group transition-all">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center font-black text-xs text-white shadow-lg shadow-indigo-500/20">
@@ -100,7 +96,6 @@ const Sidebar = () => {
           </div>
         </div>
 
-        {/* Logout Button */}
         <button 
           onClick={handleLogout}
           className="w-full flex items-center gap-3 px-5 py-3.5 rounded-2xl text-rose-400 hover:bg-rose-500/10 hover:text-rose-300 transition-all duration-300 font-bold text-xs uppercase tracking-widest"

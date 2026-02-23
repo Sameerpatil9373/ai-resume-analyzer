@@ -17,10 +17,20 @@ const Dashboard = () => {
 
   const API_BASE = "http://localhost:5000/api/resume";
 
+  // Helper to get Authorization headers
+  const getAuthHeaders = (isMultipart = false) => {
+    const userData = JSON.parse(localStorage.getItem("user"));
+    const token = userData?.token;
+    return {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": isMultipart ? "multipart/form-data" : "application/json"
+      }
+    };
+  };
+
   const handleFileUpload = async (event) => {
     const file = event.target.files[0];
-    
-    // Prevent uploading empty or non-existent files
     if (!file) return;
     if (file.size === 0) {
       alert("Selected file is empty. Please choose a valid resume.");
@@ -29,20 +39,20 @@ const Dashboard = () => {
 
     setIsUploading(true);
     const formData = new FormData();
-    formData.append("resume", file); // Must match backend upload.single("resume")
+    formData.append("resume", file);
 
     try {
-      // 1. Upload & Analyze Skills/ATS
-      const uploadRes = await axios.post(`${API_BASE}/upload`, formData, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      const authConfig = getAuthHeaders(true); // Get headers with token
+
+      // 1. Upload & Analyze
+      const uploadRes = await axios.post(`${API_BASE}/upload`, formData, authConfig);
       const savedResume = uploadRes.data.data;
 
-      // 2. Fetch Deep AI Insights
+      // 2. Fetch Deep AI Insights using the token
       const [summaryRes, questionsRes, explainRes] = await Promise.all([
-        axios.get(`${API_BASE}/summary/${savedResume._id}`),
-        axios.get(`${API_BASE}/questions/${savedResume._id}`),
-        axios.get(`${API_BASE}/explain/${savedResume._id}`)
+        axios.get(`${API_BASE}/summary/${savedResume._id}`, getAuthHeaders()),
+        axios.get(`${API_BASE}/questions/${savedResume._id}`, getAuthHeaders()),
+        axios.get(`${API_BASE}/explain/${savedResume._id}`, getAuthHeaders())
       ]);
 
       setResumeData({
@@ -61,7 +71,7 @@ const Dashboard = () => {
       alert(`Processing failed: ${errorMsg}`);
     } finally {
       setIsUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Reset input
+      if (fileInputRef.current) fileInputRef.current.value = ""; 
     }
   };
 
@@ -72,7 +82,7 @@ const Dashboard = () => {
       const response = await axios.post(`${API_BASE}/match`, {
         resumeId: resumeData._id,
         jobDescription
-      });
+      }, getAuthHeaders()); // Included token
       setMatchResult(response.data);
     } catch (error) {
       console.error("Match failed:", error.message);
@@ -91,7 +101,6 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card title="ATS Score" value={resumeData ? `${resumeData.atsScore}%` : "0%"} trend={resumeData ? "Verified" : null} icon={BarChart3} />
         <Card title="Detected Skills" value={resumeData ? resumeData.skillsDetected.length : "0"} icon={FileText} />
@@ -101,7 +110,6 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-7 space-y-8">
-          {/* Upload Box */}
           <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm">
             <div className="flex justify-between items-center mb-8">
               <h3 className="text-lg font-bold text-[#111322]">Upload Resume</h3>
@@ -122,7 +130,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* Job Match Box */}
           <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm">
             <div className="flex justify-between items-center mb-6">
               <h3 className="text-lg font-bold text-[#111322]">Job Matching</h3>
@@ -156,7 +163,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Right Column: ATS Score UI */}
         <div className="lg:col-span-5 space-y-8">
           <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm flex flex-col items-center">
             <div className="w-full flex justify-between items-center mb-10">
@@ -182,7 +188,6 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {/* AI Insights Card */}
           {resumeData?.summary && (
             <div className="bg-gradient-to-br from-[#1a1c2e] to-[#252849] rounded-[2.5rem] p-10 text-white shadow-2xl border border-white/5">
               <h3 className="text-lg font-bold flex items-center gap-3 mb-10"><Zap size={22} fill="white"/> AI Summary</h3>

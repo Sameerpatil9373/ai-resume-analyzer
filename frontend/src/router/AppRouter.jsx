@@ -8,37 +8,44 @@ import History from "../pages/History";
 import Settings from "../pages/Settings";
 import Login from "../pages/Login";
 import Signup from "../pages/Signup";
-import ProtectedRoute from "../components/ProtectedRoute"; // Import the gatekeeper
+import ProtectedRoute from "../components/ProtectedRoute";
 
 const AppRouter = () => {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Public Routes: No Sidebar or Header shown here */}
+        {/* Public Routes */}
+        <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Protected Routes: Wrapped in both Protection and Layout */}
+        {/* Protected Dashboard Shell */}
         <Route
-          path="/*"
+          path="/app/*"
           element={
             <ProtectedRoute>
               <DashboardLayout>
                 <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/upload" element={<UploadResume />} />
-                  <Route path="/job-matching" element={<JobMatching />} />
-                  <Route path="/insights" element={<AIInsights />} />
-                  <Route path="/history" element={<History />} />
-                  <Route path="/settings" element={<Settings />} />
+                  <Route path="dashboard" element={<Dashboard />} />
+                  <Route path="upload" element={<UploadResume />} />
+                  <Route path="job-matching" element={<JobMatching />} />
                   
-                  {/* Redirect any unknown paths back to dashboard */}
-                  <Route path="*" element={<Navigate to="/" replace />} />
+                  {/* Ensure the path "insights" matches your Sidebar Link */}
+                  <Route path="insights" element={<AIInsights />} />
+                  
+                  <Route path="history" element={<History />} />
+                  <Route path="settings" element={<Settings />} />
+                  
+                  {/* Catch-all for invalid /app paths */}
+                  <Route path="*" element={<Navigate to="dashboard" replace />} />
                 </Routes>
               </DashboardLayout>
             </ProtectedRoute>
           }
         />
+
+        {/* Global Redirect for non-existent root paths */}
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   );

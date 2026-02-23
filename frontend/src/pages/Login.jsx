@@ -14,7 +14,7 @@ const Login = () => {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/"); // Redirect to dashboard
+      navigate("/app/dashboard"); // Redirect to dashboard
     } catch (err) {
       alert(err.response?.data?.message || "Login failed");
     } finally {

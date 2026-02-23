@@ -4,8 +4,8 @@ import { getCurrentUser } from "../services/authService";
 const ProtectedRoute = ({ children }) => {
   const user = getCurrentUser();
   
-  if (!user) {
-    // If no user token exists, redirect to login
+  if (!user?.token) {
+    // If no valid token exists, redirect to login
     return <Navigate to="/login" replace />;
   }
 

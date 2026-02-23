@@ -20,7 +20,8 @@ const AIInsights = () => {
 
   useEffect(() => {
     if (!resumeId) {
-      navigate("/"); // Redirect if no ID is found
+      // If opened directly (e.g., from sidebar), send user to history to pick a resume
+      navigate("/app/history");
       return;
     }
 
