@@ -1,7 +1,7 @@
 const path = require("path");
 const Resume = require("../models/resume.model");
-
 const parseResume = require("../services/resumeParser.service");
+
 const {
   generateResumeSummary,
   generateInterviewQuestions,
@@ -26,12 +26,16 @@ const uploadResume = async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    const filePath = path.resolve(req.file.path);
+    // Ensure user ID is available from authMiddleware
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: "User not authenticated" });
+    }
 
+    const filePath = path.resolve(req.file.path);
     const extractedText = await parseResume(filePath);
 
+    // Validate if the content is actually a resume
     const isValidResume = validateResumeStructure(extractedText);
-
     if (!isValidResume) {
       return res.status(400).json({
         message: "Uploaded document does not appear to be a valid resume.",
@@ -39,12 +43,12 @@ const uploadResume = async (req, res) => {
     }
 
     const detectedSkills = analyzeSkills(extractedText);
-
     const atsScore = calculateATS(detectedSkills, extractedText);
-
     const predictedRole = predictRole(detectedSkills);
 
+    // CHANGE: Added userId to link resume to the logged-in user
     const savedResume = await Resume.create({
+      userId: req.user.id, 
       fileName: req.file.originalname,
       extractedText,
       skillsDetected: detectedSkills,
@@ -65,11 +69,12 @@ const uploadResume = async (req, res) => {
 };
 
 /* ===============================
-   GET ALL RESUMES
+   GET ALL RESUMES (USER SPECIFIC)
 ================================ */
 const getAllResumes = async (req, res) => {
   try {
-    const resumes = await Resume.find().sort({ createdAt: -1 });
+    // CHANGE: Filter by userId so users only see their own history
+    const resumes = await Resume.find({ userId: req.user.id }).sort({ createdAt: -1 });
 
     res.status(200).json({
       count: resumes.length,
@@ -96,11 +101,12 @@ const matchResume = async (req, res) => {
       });
     }
 
-    const resume = await Resume.findById(resumeId);
+    // CHANGE: Ensure user owns the resume being matched
+    const resume = await Resume.findOne({ _id: resumeId, userId: req.user.id });
 
     if (!resume) {
       return res.status(404).json({
-        message: "Resume not found",
+        message: "Resume not found or access denied",
       });
     }
 
@@ -117,87 +123,57 @@ const matchResume = async (req, res) => {
     });
   }
 };
+
+/* ===============================
+   AI INSIGHTS (USER SECURED)
+================================ */
+
 const getResumeSummary = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const resume = await Resume.findById(id);
+    // Ensure ownership
+    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
 
     if (!resume) {
-      return res.status(404).json({
-        message: "Resume not found",
-      });
+      return res.status(404).json({ message: "Resume not found" });
     }
 
     const summary = await generateResumeSummary(resume.extractedText);
-
-    res.status(200).json({
-      message: "AI summary generated",
-      summary,
-    });
-
+    res.status(200).json({ message: "AI summary generated", summary });
   } catch (error) {
-    res.status(500).json({
-      message: "Error generating summary",
-      error: error.message,
-    });
+    res.status(500).json({ message: "Error generating summary", error: error.message });
   }
 };
+
 const getInterviewQuestions = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const resume = await Resume.findById(id);
+    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
 
     if (!resume) {
-      return res.status(404).json({
-        message: "Resume not found",
-      });
+      return res.status(404).json({ message: "Resume not found" });
     }
 
-    const questions = await generateInterviewQuestions(
-      resume.skillsDetected
-    );
-
-    res.status(200).json({
-      message: "AI interview questions generated",
-      questions,
-    });
-
+    const questions = await generateInterviewQuestions(resume.skillsDetected);
+    res.status(200).json({ message: "AI interview questions generated", questions });
   } catch (error) {
-    res.status(500).json({
-      message: "Error generating interview questions",
-      error: error.message,
-    });
+    res.status(500).json({ message: "Error generating questions", error: error.message });
   }
 };
+
 const getRoleExplanation = async (req, res) => {
   try {
     const { id } = req.params;
-
-    const resume = await Resume.findById(id);
+    const resume = await Resume.findOne({ _id: id, userId: req.user.id });
 
     if (!resume) {
-      return res.status(404).json({
-        message: "Resume not found",
-      });
+      return res.status(404).json({ message: "Resume not found" });
     }
 
-    const explanation = await explainRoleSuitability(
-      resume.skillsDetected,
-      resume.predictedRole
-    );
-
-    res.status(200).json({
-      message: "AI role explanation generated",
-      explanation,
-    });
-
+    const explanation = await explainRoleSuitability(resume.skillsDetected, resume.predictedRole);
+    res.status(200).json({ message: "AI role explanation generated", explanation });
   } catch (error) {
-    res.status(500).json({
-      message: "Error generating role explanation",
-      error: error.message,
-    });
+    res.status(500).json({ message: "Error generating explanation", error: error.message });
   }
 };
 

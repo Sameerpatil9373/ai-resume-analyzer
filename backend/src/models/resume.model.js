@@ -22,8 +22,15 @@ const resumeSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    // Add this field to your existing schema
+userId: {
+  type: mongoose.Schema.Types.ObjectId,
+  ref: "User",
+  required: true
+},
   },
   { timestamps: true }
+
 );
 
 module.exports = mongoose.model("Resume", resumeSchema);
