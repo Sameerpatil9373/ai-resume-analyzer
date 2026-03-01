@@ -2,35 +2,25 @@ const mongoose = require("mongoose");
 
 const resumeSchema = new mongoose.Schema(
   {
-    fileName: {
-      type: String,
+    fileName: { type: String, required: true },
+    extractedText: { type: String, required: true },
+    skillsDetected: { type: [String], required: true },
+    atsScore: { type: Number, required: true },
+    predictedRole: { type: String, required: true },
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
       required: true,
     },
-    extractedText: {
-      type: String,
-      required: true,
+    // Cache field to store AI results
+    aiInsights: {
+      summary: String,
+      questions: [String],
+      explanation: String,
     },
-    skillsDetected: {
-      type: [String],
-      required: true,
-    },
-    atsScore: {
-      type: Number,
-      required: true,
-    },
-    predictedRole: {
-      type: String,
-      required: true,
-    },
-    // Add this field to your existing schema
-userId: {
-  type: mongoose.Schema.Types.ObjectId,
-  ref: "User",
-  required: true
-},
   },
   { timestamps: true }
-
 );
 
-module.exports = mongoose.model("Resume", resumeSchema);
+// FIX: Check if the model exists before compiling it
+module.exports = mongoose.models.Resume || mongoose.model("Resume", resumeSchema);

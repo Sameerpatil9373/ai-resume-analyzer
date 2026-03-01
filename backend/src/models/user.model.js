@@ -7,10 +7,19 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
 }, { timestamps: true });
 
-// Encrypt password before saving to database
-userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
-  this.password = await bcrypt.hash(this.password, 10);
+// FIX: Password ko save karne se pehle automatically hash karne ka logic
+userSchema.pre("save", async function (next) {
+  // Agar password change nahi hua toh hashing skip karo
+  if (!this.isModified("password")) return next();
+  
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
-module.exports = mongoose.model("User", userSchema);
+// Safety check to prevent OverwriteModelError
+module.exports = mongoose.models.User || mongoose.model("User", userSchema);

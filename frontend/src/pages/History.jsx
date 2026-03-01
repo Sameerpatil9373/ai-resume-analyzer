@@ -108,12 +108,13 @@ const History = () => {
                     </div>
                   </td>
                   <td className="px-8 py-6 text-right">
-                    <button 
-                      onClick={() => navigate("/insights", { state: { resumeId: resume._id } })}
-                      className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
-                    >
-                      View Analysis <ExternalLink size={14} />
-                    </button>
+                   <button 
+  onClick={() => navigate("/app/insights", { state: { resumeId: resume._id } })}
+  className="inline-flex items-center gap-2 bg-indigo-50 text-indigo-600 px-4 py-2 rounded-xl text-[10px] font-black uppercase hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+>
+  View Analysis <ExternalLink size={14} />
+</button>
+                     
                   </td>
                 </tr>
               ))

@@ -1,1 +1,22 @@
 @import "tailwindcss";
+/* Add this to the top of your index.css */
+:root {
+  --background: #f8fafc !important;
+  --foreground: #111322 !important;
+  --primary: #4f46e5 !important; /* Standard Indigo-600 Hex */
+  --secondary: #e0e7ff !important;
+}
+
+/* Force standard colors on the report container during export */
+#ai-report-content {
+  background-color: #f8fafc !important;
+  color: #111322 !important;
+}
+
+#ai-report-content .bg-indigo-600 {
+  background-color: #4f46e5 !important;
+}
+
+#ai-report-content .text-indigo-600 {
+  color: #4f46e5 !important;
+}
