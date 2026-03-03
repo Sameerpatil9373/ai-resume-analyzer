@@ -3,7 +3,7 @@ const skillsList = [
   "javascript", "node.js", "express", "mongodb", "react", "next.js", "typescript",
   "html", "css", "tailwind", "bootstrap", "sass", "redux", "graphql",
   // Python & Data Science
-  "python", "django", "flask", "fastapi", "pandas", "numpy", "tensorflow", "pytorch",
+  "python", "django", "flask", "fastapi", "pandas", "numpy", "tensorflow", "pytorch", "machine learning",
   // Languages & Databases
   "java", "c++", "php", "mysql", "sql", "postgresql", "firebase", "redis",
   // DevOps & Cloud

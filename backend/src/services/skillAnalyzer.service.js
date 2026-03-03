@@ -1,83 +1,82 @@
 const skillsList = require("../utils/skillsList");
+const {
+  normalizeTextForSkillMatch,
+  getCanonicalSkillVariants,
+  extractRoleImpliedSkills,
+  canonicalizeSkill,
+  uniqLower,
+} = require("../utils/skillNormalization");
 
 const analyzeSkills = (text) => {
-  const detectedSkills = [];
-  const lowerText = text.toLowerCase();
+  const normalizedText = normalizeTextForSkillMatch(text || "");
+  const detected = new Set();
 
   skillsList.forEach((skill) => {
-    const escapedSkill = skill.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
-    // UPDATED: Advanced Regex to handle symbols like React/Node or Java|Python
-    const regex = new RegExp(`(?:^|\\s|[\\/\\|•,])(${escapedSkill})(?=$|\\s|[\\/\\|•,])`, "i");
-
-    if (regex.test(lowerText)) {
-      detectedSkills.push(skill);
-    }
+    const variants = getCanonicalSkillVariants(skill);
+    variants.forEach((variant) => {
+      const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(`(?:^|\\s)${escaped}(?=$|\\s)`, "i");
+      if (regex.test(normalizedText)) {
+        detected.add(canonicalizeSkill(skill));
+      }
+    });
   });
 
-  return detectedSkills;
+  extractRoleImpliedSkills(text).forEach((skill) => detected.add(skill));
+
+  return Array.from(detected);
 };
 
 const detectExperience = (text) => {
-  const lowerText = text.toLowerCase();
+  const lowerText = (text || "").toLowerCase();
   return lowerText.includes("year") || lowerText.includes("experience") || lowerText.includes("worked at");
 };
 
 const detectEducation = (text) => {
-  const lowerText = text.toLowerCase();
+  const lowerText = (text || "").toLowerCase();
   return lowerText.includes("bachelor") || lowerText.includes("master") || lowerText.includes("b.tech") || lowerText.includes("university") || lowerText.includes("degree");
 };
 
-const detectProjects = (text) => text.toLowerCase().includes("project");
+const detectProjects = (text) => (text || "").toLowerCase().includes("project");
 
 const detectQualityKeywords = (text) => {
-  const lowerText = text.toLowerCase();
+  const lowerText = (text || "").toLowerCase();
   const qualityWords = ["developed", "implemented", "designed", "optimized", "managed", "created"];
-  return qualityWords.filter(word => lowerText.includes(word)).length;
+  return qualityWords.filter((word) => lowerText.includes(word)).length;
 };
 
 const validateResumeStructure = (text) => {
-  const lowerText = text.toLowerCase();
+  const lowerText = (text || "").toLowerCase();
   const hasSkills = lowerText.includes("skills") || lowerText.includes("technical");
   const hasEducation = lowerText.includes("education") || lowerText.includes("bachelor") || lowerText.includes("degree");
-  const hasExperience = lowerText.includes("experience") || lowerText.includes("projects") || lowerText.includes("worked");
-  return !!(hasSkills && (hasEducation || hasExperience));
+  const hasExperience = lowerText.includes("experience") || lowerText.includes("internship") || lowerText.includes("work");
+
+  return hasSkills || hasEducation || hasExperience;
 };
 
-const calculateATS = (detectedSkills, text) => {
-  let score = 0;
-  if (skillsList.length > 0) score += (detectedSkills.length / skillsList.length) * 50;
-  if (detectExperience(text)) score += 20;
-  if (detectEducation(text)) score += 15;
-  if (detectProjects(text)) score += 10;
-  if (detectQualityKeywords(text) >= 2) score += 5;
-  return Math.round(score);
+const calculateATS = (skills, text) => {
+  const skillScore = Math.min((skills.length / skillsList.length) * 60, 60);
+  const structureScore = validateResumeStructure(text) ? 20 : 0;
+  const qualityScore = Math.min(detectQualityKeywords(text) * 2, 20);
+
+  return Math.round(skillScore + structureScore + qualityScore);
 };
 
-const predictRole = (detectedSkills) => {
-  const skills = detectedSkills.map(s => s.toLowerCase());
+const predictRole = (skills) => {
+  const normalizedSkills = uniqLower((skills || []).map(canonicalizeSkill));
 
-  // 1. DevOps Priority
-  if (skills.includes("docker") || skills.includes("kubernetes") || skills.includes("aws") || skills.includes("jenkins")) {
-    return "DevOps Engineer";
-  }
-  
-  // 2. Python Developer
-  if (skills.includes("python") || skills.includes("django") || skills.includes("flask")) {
-    return "Python Developer";
-  }
-
-  // 3. Full Stack vs Backend vs Frontend
-  const hasBackend = skills.includes("node.js") || skills.includes("express") || skills.includes("mongodb") || skills.includes("postgresql");
-  const hasFrontend = skills.includes("react") || skills.includes("next.js") || skills.includes("javascript");
-
-  if (hasBackend && hasFrontend) return "Full Stack Developer";
-  if (hasBackend) return "Backend Developer";
-  if (hasFrontend) return "Frontend Developer";
-
-  if (skills.includes("java")) return "Java Developer";
-
+  if (normalizedSkills.includes("react") && normalizedSkills.includes("node.js")) return "Full Stack Developer";
+  if (normalizedSkills.includes("python") && normalizedSkills.includes("machine learning")) return "AI/ML Engineer";
+  if (normalizedSkills.includes("java") && normalizedSkills.includes("sql")) return "Backend Developer";
   return "Software Developer";
 };
 
-module.exports = { analyzeSkills, calculateATS, predictRole, validateResumeStructure };
+module.exports = {
+  analyzeSkills,
+  detectExperience,
+  detectEducation,
+  detectProjects,
+  calculateATS,
+  predictRole,
+  validateResumeStructure,
+};
