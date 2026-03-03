@@ -76,6 +76,7 @@ const matchResume = async (req, res) => {
     const { resumeId, jobDescription } = req.body;
     const userId = getUserId(req);
     const resume = await Resume.findOne({ _id: resumeId, userId });
+    if (!resume) return res.status(404).json({ message: "Resume not found" });
     const result = await analyzeJobMatch(resume.extractedText, jobDescription);
     res.status(200).json(result);
   } catch (error) {

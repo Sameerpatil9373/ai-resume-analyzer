@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:5000/api/auth";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000";
+const API_URL = `${API_BASE_URL}/api/auth`;
 
 export const login = async (email, password) => {
   const response = await axios.post(`${API_URL}/login`, { email, password });
@@ -19,5 +20,10 @@ export const logout = () => {
 };
 
 export const getCurrentUser = () => {
-  return JSON.parse(localStorage.getItem("user"));
+  const user = localStorage.getItem("user");
+  try {
+    return user ? JSON.parse(user) : null;
+  } catch (error) {
+    return null;
+  }
 };

@@ -17,6 +17,7 @@ const Dashboard = () => {
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
+  // ✅ LOAD LATEST RESUME ON MOUNT
   useEffect(() => {
     const loadLatest = async () => {
       try {
@@ -29,6 +30,8 @@ const Dashboard = () => {
             questions: latest.aiInsights?.questions || [],
             explanation: latest.aiInsights?.explanation || ""
           });
+          // Save ID for persistence across pages
+          localStorage.setItem("lastResumeId", latest._id);
         }
       } catch (err) {
         console.error("Failed to load history", err);
@@ -45,13 +48,13 @@ const Dashboard = () => {
     formData.append("resume", file);
 
     try {
-      // 1. Initial Upload (ATS/Skills/Role)
       const uploadRes = await api.post("/api/resume/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
       const savedResume = uploadRes.data.data;
+      localStorage.setItem("lastResumeId", savedResume._id);
 
-      // 2. Immediate AI Analysis (No job description required)
+      // Trigger immediate AI Analysis
       const insightsRes = await api.get(`/api/resume/insights/${savedResume._id}`);
       
       setResumeData({
@@ -61,41 +64,53 @@ const Dashboard = () => {
         explanation: insightsRes.data.explanation
       });
 
-      // Reset optional job matcher state for the new file
       setMatchResult(null);
       setJobDescription("");
     } catch (error) {
-      alert("Analysis failed. Please check your API key configuration.");
+      alert("Analysis failed. Check your API key or file format.");
     } finally {
       setIsUploading(false);
     }
   };
 
   const handleJobMatch = async () => {
-    // Only proceed if there is a resume and pasted text
-    if (!resumeData?._id || !jobDescription.trim()) return;
+    const currentId = resumeData?._id || localStorage.getItem("lastResumeId");
+    
+    if (!currentId || !jobDescription.trim()) {
+      alert("Please upload a resume and paste a job description first.");
+      return;
+    };
+
     setIsMatching(true);
     try {
       const response = await api.post(`/api/resume/match`, {
-        resumeId: resumeData._id,
-        jobDescription: jobDescription.trim()
+        resumeId: currentId,
+        jobDescription: jobDescription.trim() 
       });
-      setMatchResult(response.data);
+
+      // ✅ FIX: If score is 0, it might be due to low context.
+      if (response.data) {
+        setMatchResult(response.data);
+        if (response.data.matchScore === 0) {
+          console.warn("AI returned 0%. Ensure the Job Description is detailed.");
+        }
+      }
     } catch (error) {
-      console.error("Match failed:", error.message);
+      console.error("Match failed:", error);
+      alert("AI matching failed. Try again in a moment.");
     } finally {
       setIsMatching(false);
     }
   };
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 pb-10">
-      <div className="flex justify-between items-center">
+    <div className="max-w-[1600px] mx-auto space-y-8 pb-10 px-4">
+      <div className="flex justify-between items-center mt-6">
         <h2 className="text-3xl font-black text-[#111322]">Dashboard</h2>
         {resumeData && (
           <button 
             onClick={() => navigate("/app/insights", { state: { resumeId: resumeData._id } })}
-            className="flex items-center gap-2 text-indigo-600 font-bold text-sm"
+            className="flex items-center gap-2 text-indigo-600 font-black text-sm hover:translate-x-1 transition-transform"
           >
             Full AI Report <ArrowRight size={18} />
           </button>
@@ -117,45 +132,51 @@ const Dashboard = () => {
               onClick={() => !isUploading && fileInputRef.current.click()}
               className="border-2 border-dashed rounded-[2rem] p-12 text-center border-indigo-100 bg-indigo-50/20 cursor-pointer hover:bg-indigo-50/40 transition-all"
             >
-              {isUploading ? <Loader2 className="animate-spin mx-auto mb-4" /> : <UploadCloud size={32} className="mx-auto mb-4 text-indigo-600" />}
+              {isUploading ? <Loader2 className="animate-spin mx-auto mb-4 text-indigo-600" /> : <UploadCloud size={32} className="mx-auto mb-4 text-indigo-600" />}
               <p className="text-xl font-bold">{isUploading ? "AI is processing..." : "Upload New Resume"}</p>
             </div>
           </div>
 
           <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm">
-            <h3 className="text-lg font-bold mb-6 text-[#111322]">Job Matching (Optional)</h3>
+            <h3 className="text-lg font-black mb-6 text-[#111322]">Job Matching (Optional)</h3>
             <textarea
-              className="w-full p-6 rounded-[1.5rem] bg-gray-50/80 mb-6 outline-none min-h-[160px] font-medium"
-              placeholder="Paste job description here to check compatibility..."
+              className="w-full p-6 rounded-[1.5rem] bg-gray-50/80 mb-6 outline-none min-h-[160px] font-medium border border-transparent focus:border-indigo-100 transition-all"
+              placeholder="Paste a detailed job description here (e.g. 'Looking for a MERN developer with 2 years of React experience...')"
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
             />
             <button 
               onClick={handleJobMatch} 
-              // Button is only active if text is pasted
               disabled={!resumeData || !jobDescription.trim() || isMatching}
-              className={`px-8 py-3 rounded-xl font-bold w-full shadow-md transition-all ${
-                !jobDescription.trim() 
+              className={`px-8 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest w-full shadow-lg transition-all ${
+                !jobDescription.trim() || !resumeData
                 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' 
-                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700 active:scale-[0.98]'
               }`}
             >
               {isMatching ? "Analysing Match..." : "Run AI Matcher"}
             </button>
 
-            {/* Match Results Display */}
             {matchResult && (
-              <div className="mt-8 bg-emerald-50/40 p-8 rounded-[2rem] border border-emerald-100/50 animate-in slide-in-from-top-2">
-                <div className="flex items-center gap-10">
-                  <div className="text-center">
+              <div className="mt-8 bg-emerald-50/40 p-8 rounded-[2rem] border border-emerald-100/50 animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center gap-10 flex-wrap md:flex-nowrap">
+                  <div className="text-center min-w-[100px]">
                     <div className="text-6xl font-black text-emerald-500">{matchResult.matchScore}%</div>
-                    <p className="text-[10px] text-emerald-600/60 font-black uppercase mt-2">Match Score</p>
+                    <p className="text-[10px] text-emerald-600/60 font-black uppercase mt-2 tracking-widest">Match Score</p>
                   </div>
                   <div className="flex-1 flex flex-wrap gap-2">
-                    {matchResult.matchingSkills?.map(s => <span key={s} className="px-3 py-1 bg-white text-emerald-600 text-[10px] font-black rounded-lg border border-emerald-100">✓ {s}</span>)}
-                    {matchResult.missingSkills?.map(s => <span key={s} className="px-3 py-1 bg-white text-rose-500 text-[10px] font-black rounded-lg border border-rose-100">× {s}</span>)}
+                    {matchResult.matchingSkills?.length > 0 ? (
+                      matchResult.matchingSkills.map(s => <span key={s} className="px-3 py-1 bg-white text-emerald-600 text-[10px] font-black rounded-lg border border-emerald-100 shadow-sm">✓ {s}</span>)
+                    ) : <span className="text-gray-400 text-[10px] italic">No skill matches found.</span>}
+                    
+                    {matchResult.missingSkills?.map(s => <span key={s} className="px-3 py-1 bg-white text-rose-500 text-[10px] font-black rounded-lg border border-rose-100 shadow-sm">× {s}</span>)}
                   </div>
                 </div>
+                {matchResult.explanation && (
+                  <p className="mt-6 text-[12px] text-gray-600 font-bold italic leading-relaxed">
+                    {matchResult.explanation}
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -167,20 +188,20 @@ const Dashboard = () => {
               <ProgressCircle percentage={resumeData ? resumeData.atsScore : 0} size={220} stroke={16} />
               <div className="absolute inset-0 flex flex-col items-center justify-center pt-2">
                  <span className="text-5xl font-black text-[#111322]">{resumeData ? resumeData.atsScore : 0}</span>
-                 <span className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">ATS Score</span>
+                 <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest">ATS Score</span>
               </div>
             </div>
             <div className="mt-8 w-full border-t pt-8">
               <div className="flex justify-between items-center">
-                <span className="text-gray-400 font-black text-[10px] uppercase">Predicted Role</span>
-                <span className="text-indigo-600 font-bold italic">{resumeData ? resumeData.predictedRole : "Not Analyzed"}</span>
+                <span className="text-gray-400 font-black text-[10px] uppercase tracking-widest">Predicted Role</span>
+                <span className="text-indigo-600 font-black italic text-sm">{resumeData ? resumeData.predictedRole : "Not Analyzed"}</span>
               </div>
             </div>
           </div>
 
           {resumeData?.summary && (
             <div className="bg-[#111322] rounded-[2.5rem] p-10 text-white shadow-xl animate-in slide-in-from-bottom-4">
-              <h3 className="text-lg font-bold flex items-center gap-3 mb-6">
+              <h3 className="text-lg font-black flex items-center gap-3 mb-6">
                 <Zap size={22} className="text-indigo-400" fill="currentColor"/> Executive AI Summary
               </h3>
               <p className="text-[14px] leading-relaxed font-medium italic text-gray-300 border-l-2 border-indigo-500/50 pl-6">

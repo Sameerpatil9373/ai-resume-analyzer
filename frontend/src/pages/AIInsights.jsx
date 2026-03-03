@@ -1,18 +1,19 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import api from "../services/api"; // Centralized API service for Auth
+import api from "../services/api"; 
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { 
   Zap, HelpCircle, AlertCircle, ArrowLeft, 
-  Download, RefreshCcw, Loader2, CheckCircle2 
+  Download, RefreshCcw, Loader2 
 } from "lucide-react";
 
 const AIInsights = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const resumeId = location.state?.resumeId;
-
+  
+  // ✅ State for Resume ID with persistence logic
+  const [resumeId, setResumeId] = useState(location.state?.resumeId || localStorage.getItem("lastResumeId"));
   const [activeTab, setActiveTab] = useState("analysis");
   const [data, setData] = useState({
     summary: "",
@@ -22,36 +23,69 @@ const AIInsights = () => {
     isExporting: false
   });
 
-  const fetchDeepAnalysis = async (isRefresh = false) => {
+  // ✅ Consolidated fetch logic to avoid multiple triggers
+  const fetchDeepAnalysis = useCallback(async (targetId, isRefresh = false) => {
+    if (!targetId || targetId === "undefined") return;
+
     if (isRefresh) setData(prev => ({ ...prev, loading: true }));
+    
     try {
-      // Points to the NEW consolidated route to avoid 404 errors
-      const response = await api.get(`/api/resume/insights/${resumeId}`);
+      // Hits the backend route you established in resume.routes.js
+      const response = await api.get(`/api/resume/insights/${targetId}`);
 
       setData({
-        summary: response.data.summary,
+        summary: response.data.summary || "Summary unavailable.",
         questions: response.data.questions || [],
-        explanation: response.data.explanation,
+        explanation: response.data.explanation || "No suitability analysis provided.",
         loading: false,
         isExporting: false
       });
     } catch (error) {
-      console.error("Analysis failed:", error);
-      // Stay on page even if it fails to allow retry
+      console.error("Deep Analysis Error:", error);
       setData(prev => ({ ...prev, loading: false }));
-      alert("The AI service is currently unavailable. Please check your API key balance.");
+      
+      const errorMsg = error.response?.status === 500 
+        ? "AI Logic error. Please check your OpenRouter model settings."
+        : "Connection Error. Please try again.";
+      
+      alert(errorMsg);
     }
-  };
+  }, []);
 
+  // ✅ Initialize ID and Data on Mount
   useEffect(() => {
-    if (!resumeId) {
-      setData(prev => ({ ...prev, loading: false }));
-      return;
-    }
-    fetchDeepAnalysis();
-  }, [resumeId]);
+    const initialize = async () => {
+      let currentId = resumeId;
 
-  // PDF Export Logic
+      // If ID is missing, try to fetch the latest from the server
+      if (!currentId || currentId === "undefined") {
+        try {
+          const res = await api.get("/api/resume/all");
+          const latest = res.data.data[0];
+          if (latest?._id) {
+            currentId = latest._id;
+            setResumeId(currentId);
+            localStorage.setItem("lastResumeId", currentId);
+          } else {
+            navigate("/app/dashboard"); // Redirect if no resume exists
+            return;
+          }
+        } catch (err) {
+          console.error("Auto-fetch failed:", err);
+          setData(prev => ({ ...prev, loading: false }));
+          return;
+        }
+      } else {
+        localStorage.setItem("lastResumeId", currentId);
+      }
+
+      // Fetch the actual analysis
+      fetchDeepAnalysis(currentId);
+    };
+
+    initialize();
+  }, [resumeId, navigate, fetchDeepAnalysis]);
+
   const handleExportPDF = async () => {
     const reportElement = document.getElementById("ai-report-content");
     if (!reportElement) return;
@@ -65,7 +99,7 @@ const AIInsights = () => {
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
       pdf.save(`AI-Report-${resumeId.slice(-6)}.pdf`);
     } catch (error) {
-      console.error("Export failed:", error);
+      console.error("PDF Export Error:", error);
     } finally {
       setData(prev => ({ ...prev, isExporting: false }));
     }
@@ -74,29 +108,27 @@ const AIInsights = () => {
   if (data.loading) return (
     <div className="h-[80vh] flex flex-col items-center justify-center space-y-4">
       <Loader2 className="animate-spin text-indigo-600" size={48} />
-      <p className="text-gray-400 font-black uppercase tracking-widest text-xs">Generating AI Report...</p>
+      <p className="text-gray-400 font-black uppercase tracking-widest text-[10px] tracking-[0.2em]">Synthesizing AI Insights...</p>
     </div>
   );
 
   return (
-    <div className="max-w-[1600px] mx-auto space-y-8 pb-20">
-      {/* Action Bar */}
+    <div className="max-w-[1600px] mx-auto space-y-8 pb-20 px-4 mt-6">
       <div className="flex justify-between items-center">
         <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-400 hover:text-indigo-600 font-bold text-sm transition-colors">
           <ArrowLeft size={20} /> Back
         </button>
         <div className="flex gap-4">
-          <button onClick={handleExportPDF} disabled={data.isExporting} className="bg-white border border-gray-100 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:shadow-md transition-all">
+          <button onClick={handleExportPDF} disabled={data.isExporting} className="bg-white border border-gray-100 px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:shadow-md transition-all disabled:opacity-50">
             {data.isExporting ? <Loader2 size={16} className="animate-spin" /> : <Download size={16} />}
             {data.isExporting ? "Processing..." : "Export PDF"}
           </button>
-          <button onClick={() => fetchDeepAnalysis(true)} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all">
+          <button onClick={() => fetchDeepAnalysis(resumeId, true)} className="bg-indigo-600 text-white px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-lg hover:bg-indigo-700 transition-all">
             <RefreshCcw size={16} /> Re-Analyze
           </button>
         </div>
       </div>
 
-      {/* Content Container */}
       <div id="ai-report-content" className="space-y-8">
         <div className="flex gap-2 bg-gray-100/50 p-1.5 rounded-[1.5rem] w-fit border border-gray-100">
           <button onClick={() => setActiveTab("analysis")} className={`px-8 py-3 rounded-[1.2rem] text-[11px] font-black uppercase tracking-wider transition-all ${activeTab === "analysis" ? "bg-[#111322] text-white shadow-lg" : "text-gray-400"}`}>AI Analysis</button>
@@ -124,12 +156,14 @@ const AIInsights = () => {
               <HelpCircle size={24} className="text-indigo-600" /> Interview Prep
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              {data.questions.map((question, index) => (
+              {data.questions && data.questions.length > 0 ? data.questions.map((question, index) => (
                 <div key={index} className="flex gap-6 p-8 rounded-[2.5rem] bg-gray-50/50 border border-transparent hover:border-indigo-100 hover:bg-white transition-all group">
                   <span className="w-10 h-10 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-black text-sm group-hover:bg-indigo-600 group-hover:text-white transition-all">{index + 1}</span>
                   <p className="text-[15px] font-bold text-gray-700 leading-snug group-hover:text-gray-900">{question}</p>
                 </div>
-              ))}
+              )) : (
+                <p className="text-gray-400 p-8 font-bold italic">No questions found. Try Re-Analyzing.</p>
+              )}
             </div>
           </div>
         )}
