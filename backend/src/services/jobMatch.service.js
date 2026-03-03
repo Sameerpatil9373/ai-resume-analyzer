@@ -1,123 +1,120 @@
 const { OpenRouter } = require("@openrouter/sdk");
 const { analyzeSkills } = require("./skillAnalyzer.service");
+const {
+  canonicalizeSkill,
+  extractRoleImpliedSkills,
+  uniqLower,
+} = require("../utils/skillNormalization");
 
 const openrouter = new OpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
 });
 
-const uniq = (arr) => [...new Set((arr || []).filter(Boolean))];
-
-// ✅ IMPROVED: Semantic implied skills logic
-const impliedSkillsFromRoleText = (text) => {
-  const t = (text || "").toLowerCase();
-  const implied = [];
-
-  if (t.includes("mern") || t.includes("mongodb") || t.includes("react")) {
-    implied.push("javascript", "react", "node.js", "express", "mongodb", "rest api");
-  }
-  if (t.includes("full stack") || t.includes("fullstack")) {
-    implied.push("html", "css", "javascript", "react", "node.js", "express", "api", "git");
-  }
-  if (t.includes("java")) {
-    implied.push("java", "oops", "sql", "api");
-  }
-  if (t.includes("python") || t.includes("ai") || t.includes("ml")) {
-    implied.push("python", "pandas", "machine learning");
-  }
-
-  return uniq(implied);
-};
-
-// ✅ ROBUST FALLBACK: Fixes the 'React dev knows JS' logic manually
 const buildHeuristicMatch = (resumeText, jobDescription, reason) => {
-  const resumeSkills = uniq(analyzeSkills(resumeText || "").map((s) => s.toLowerCase()));
-  const jdSkillsExplicit = uniq(analyzeSkills(jobDescription || "").map((s) => s.toLowerCase()));
-  const jdSkillsImplied = impliedSkillsFromRoleText(jobDescription || "");
-  const required = uniq([...jdSkillsExplicit, ...jdSkillsImplied]);
+  const resumeSkills = uniqLower(analyzeSkills(resumeText || "").map(canonicalizeSkill));
+  const jdSkillsExplicit = uniqLower(analyzeSkills(jobDescription || "").map(canonicalizeSkill));
+  const jdSkillsImplied = extractRoleImpliedSkills(jobDescription || "");
+  const required = uniqLower([...jdSkillsExplicit, ...jdSkillsImplied]);
 
   if (required.length === 0) {
     return {
       matchScore: 0,
       matchingSkills: [],
       missingSkills: [],
-      explanation: reason || "Provide a detailed JD for better AI matching."
+      source: "heuristic",
+      explanation: reason || "Provide a detailed JD for better matching.",
     };
   }
 
-  // ✅ CRITICAL FIX: Explicitly check for implied JS
-  const matching = required.filter((s) => {
-    if (resumeSkills.includes(s)) return true;
-    // Logical Rule: React/Node on resume = JavaScript match
-    if (s === "javascript" && (resumeSkills.includes("react") || resumeSkills.includes("node.js"))) return true;
+  const matching = required.filter((skill) => {
+    if (resumeSkills.includes(skill)) return true;
+    if (skill === "javascript" && (resumeSkills.includes("react") || resumeSkills.includes("node.js"))) return true;
+    if (skill === "api" && resumeSkills.includes("rest")) return true;
     return false;
   });
 
-  const missing = required.filter((s) => !matching.includes(s));
+  const missing = required.filter((skill) => !matching.includes(skill));
   const score = Math.max(10, Math.min(100, Math.round((matching.length / required.length) * 100)));
 
   return {
     matchScore: score,
     matchingSkills: matching,
     missingSkills: missing,
-    explanation: reason || "Heuristic match based on tech stack alignment."
+    source: "heuristic",
+    explanation: reason || "Deterministic skill match based on normalized skills and role implications.",
   };
 };
 
 const enrichJobDescription = (jobDescription) => {
   const jd = (jobDescription || "").trim();
-  const explicit = analyzeSkills(jd);
-  const implied = impliedSkillsFromRoleText(jd);
-  const skills = uniq([...explicit.map((s) => s.toLowerCase()), ...implied]);
+  const explicit = analyzeSkills(jd).map(canonicalizeSkill);
+  const implied = extractRoleImpliedSkills(jd);
+  const skills = uniqLower([...explicit, ...implied]);
 
   if (jd.length < 100 || explicit.length === 0) {
     if (skills.length === 0) return jd;
-    return `${jd}\n\nImplied requirements: ${skills.join(", ")}.`;
+    return `${jd}\n\nInterpreted required skills: ${skills.join(", ")}.`;
   }
+
   return jd;
 };
 
 const analyzeJobMatch = async (resumeText, jobDescription) => {
+  const heuristicResult = buildHeuristicMatch(resumeText, jobDescription);
+
+  if ((jobDescription || "").trim().length < 60) {
+    return {
+      ...heuristicResult,
+      explanation: "Short job prompt detected. Used deterministic matching from interpreted role skills.",
+    };
+  }
+
   try {
     const enrichedJD = enrichJobDescription(jobDescription);
-    
-    // ✅ Using Trinity-Large Reasoning
+
     const response = await openrouter.chat.send({
       model: "arcee-ai/trinity-large-preview:free",
       messages: [
         {
           role: "system",
-          content: `You are an expert ATS. 
-          REASONING RULE: If a candidate has 'React' or 'Node.js', they implicitly have 'JavaScript' skills. DO NOT mark JavaScript as missing.
-          Always return ONLY a valid JSON object.`
+          content: `You are an expert ATS assistant.
+Always return ONLY valid JSON with this shape:
+{
+  "matchScore": number,
+  "matchingSkills": string[],
+  "missingSkills": string[],
+  "explanation": string
+}
+Ground your response on the provided interpreted skills and resume text.`,
         },
         {
           role: "user",
-          content: `Resume: ${resumeText}\n\nJob: ${enrichedJD}\n\n
-          Return JSON:
-          {
-            "matchScore": number,
-            "matchingSkills": [],
-            "missingSkills": [],
-            "explanation": "Brief semantic suitability analysis."
-          }`
-        }
-      ]
+          content: `Resume: ${resumeText}\n\nJob: ${enrichedJD}\n\nBaseline deterministic analysis: ${JSON.stringify(
+            heuristicResult
+          )}`,
+        },
+      ],
     });
 
     const content = response.choices[0]?.message?.content;
     const jsonMatch = (content || "").match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("Invalid JSON from AI");
-    
-    return JSON.parse(jsonMatch[0]);
 
+    const parsed = JSON.parse(jsonMatch[0]);
+    return {
+      ...parsed,
+      source: "ai+heuristic",
+      matchingSkills: uniqLower((parsed.matchingSkills || []).map(canonicalizeSkill)),
+      missingSkills: uniqLower((parsed.missingSkills || []).map(canonicalizeSkill)),
+    };
   } catch (error) {
     console.error("Match Analysis Error:", error.message);
     return buildHeuristicMatch(
       resumeText,
       jobDescription,
-      "AI service rate-limited. Showing heuristic match based on detected stack."
+      "AI unavailable. Showing deterministic match based on normalized and implied skills."
     );
   }
 };
 
-module.exports = { analyzeJobMatch };
+module.exports = { analyzeJobMatch, buildHeuristicMatch };
