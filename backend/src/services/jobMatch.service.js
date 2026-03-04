@@ -1,120 +1,137 @@
-const { OpenRouter } = require("@openrouter/sdk");
 const { analyzeSkills } = require("./skillAnalyzer.service");
-const {
-  canonicalizeSkill,
-  extractRoleImpliedSkills,
-  uniqLower,
-} = require("../utils/skillNormalization");
+const { canonicalizeSkill, uniqLower } = require("../utils/skillNormalization");
 
-const openrouter = new OpenRouter({
-  apiKey: process.env.OPENROUTER_API_KEY,
-});
+/*
+  Predefined Industry Role Templates
+  You can expand this later if needed
+*/
+const roleTemplates = {
+  "Backend Developer": [
+    "nodejs", "express", "mongodb", "api", "jwt",
+    "database", "rest", "authentication", "deployment"
+  ],
 
-const buildHeuristicMatch = (resumeText, jobDescription, reason) => {
-  const resumeSkills = uniqLower(analyzeSkills(resumeText || "").map(canonicalizeSkill));
-  const jdSkillsExplicit = uniqLower(analyzeSkills(jobDescription || "").map(canonicalizeSkill));
-  const jdSkillsImplied = extractRoleImpliedSkills(jobDescription || "");
-  const required = uniqLower([...jdSkillsExplicit, ...jdSkillsImplied]);
+  "Frontend Developer": [
+    "react", "javascript", "html", "css",
+    "redux", "responsive design", "hooks"
+  ],
 
-  if (required.length === 0) {
-    return {
-      matchScore: 0,
-      matchingSkills: [],
-      missingSkills: [],
-      source: "heuristic",
-      explanation: reason || "Provide a detailed JD for better matching.",
-    };
-  }
+  "Full Stack Developer": [
+    "react", "nodejs", "mongodb", "express",
+    "javascript", "api", "deployment"
+  ],
 
-  const matching = required.filter((skill) => {
-    if (resumeSkills.includes(skill)) return true;
-    if (skill === "javascript" && (resumeSkills.includes("react") || resumeSkills.includes("node.js"))) return true;
-    if (skill === "api" && resumeSkills.includes("rest")) return true;
-    return false;
-  });
+  "Java Developer": [
+    "java", "spring", "hibernate",
+    "rest", "microservices"
+  ],
 
-  const missing = required.filter((skill) => !matching.includes(skill));
-  const score = Math.max(10, Math.min(100, Math.round((matching.length / required.length) * 100)));
+  "Python Developer": [
+    "python", "django", "flask",
+    "api", "database"
+  ],
 
-  return {
-    matchScore: score,
-    matchingSkills: matching,
-    missingSkills: missing,
-    source: "heuristic",
-    explanation: reason || "Deterministic skill match based on normalized skills and role implications.",
-  };
-};
+  "Software Tester": [
+    "testing", "selenium",
+    "automation", "jira", "test cases"
+  ],
 
-const enrichJobDescription = (jobDescription) => {
-  const jd = (jobDescription || "").trim();
-  const explicit = analyzeSkills(jd).map(canonicalizeSkill);
-  const implied = extractRoleImpliedSkills(jd);
-  const skills = uniqLower([...explicit, ...implied]);
+  "AI / ML Engineer": [
+    "python", "machine learning",
+    "tensorflow", "pandas", "data science"
+  ],
 
-  if (jd.length < 100 || explicit.length === 0) {
-    if (skills.length === 0) return jd;
-    return `${jd}\n\nInterpreted required skills: ${skills.join(", ")}.`;
-  }
-
-  return jd;
+  "Cyber Security Analyst": [
+    "cyber security",
+    "network security",
+    "penetration testing",
+    "firewall"
+  ]
 };
 
 const analyzeJobMatch = async (resumeText, jobDescription) => {
-  const heuristicResult = buildHeuristicMatch(resumeText, jobDescription);
+  const resumeSkills = uniqLower(
+    analyzeSkills(resumeText).map(canonicalizeSkill)
+  );
 
-  if ((jobDescription || "").trim().length < 60) {
-    return {
-      ...heuristicResult,
-      explanation: "Short job prompt detected. Used deterministic matching from interpreted role skills.",
-    };
-  }
-
-  try {
-    const enrichedJD = enrichJobDescription(jobDescription);
-
-    const response = await openrouter.chat.send({
-      model: "arcee-ai/trinity-large-preview:free",
-      messages: [
-        {
-          role: "system",
-          content: `You are an expert ATS assistant.
-Always return ONLY valid JSON with this shape:
-{
-  "matchScore": number,
-  "matchingSkills": string[],
-  "missingSkills": string[],
-  "explanation": string
-}
-Ground your response on the provided interpreted skills and resume text.`,
-        },
-        {
-          role: "user",
-          content: `Resume: ${resumeText}\n\nJob: ${enrichedJD}\n\nBaseline deterministic analysis: ${JSON.stringify(
-            heuristicResult
-          )}`,
-        },
-      ],
-    });
-
-    const content = response.choices[0]?.message?.content;
-    const jsonMatch = (content || "").match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("Invalid JSON from AI");
-
-    const parsed = JSON.parse(jsonMatch[0]);
-    return {
-      ...parsed,
-      source: "ai+heuristic",
-      matchingSkills: uniqLower((parsed.matchingSkills || []).map(canonicalizeSkill)),
-      missingSkills: uniqLower((parsed.missingSkills || []).map(canonicalizeSkill)),
-    };
-  } catch (error) {
-    console.error("Match Analysis Error:", error.message);
-    return buildHeuristicMatch(
-      resumeText,
-      jobDescription,
-      "AI unavailable. Showing deterministic match based on normalized and implied skills."
+  // 🔥 CASE 1 — If user provides job description
+  if (jobDescription && jobDescription.trim().length > 10) {
+    const jobSkills = uniqLower(
+      analyzeSkills(jobDescription).map(canonicalizeSkill)
     );
+
+    if (!jobSkills.length) {
+      return [
+        {
+          role: "Custom Role",
+          matchScore: 0,
+          matchingSkills: [],
+          missingSkills: [],
+          explanation: "Job description too short. Add required skills."
+        }
+      ];
+    }
+
+    const matchingSkills = jobSkills.filter(skill =>
+      resumeSkills.includes(skill)
+    );
+
+    const missingSkills = jobSkills.filter(skill =>
+      !resumeSkills.includes(skill)
+    );
+
+    const matchScore = Math.round(
+      (matchingSkills.length / jobSkills.length) * 100
+    );
+
+    return [
+      {
+        role: "Custom Role",
+        matchScore,
+        matchingSkills,
+        missingSkills,
+        explanation: `
+You are ${matchScore}% aligned with this role.
+To improve your profile, focus on: ${missingSkills.join(", ") || "No major gaps detected"}.
+`
+      }
+    ];
   }
+
+  // 🔥 CASE 2 — No JD → Auto-match with predefined roles
+  const results = [];
+
+  for (const role in roleTemplates) {
+    const requiredSkills = roleTemplates[role];
+
+    const matchingSkills = requiredSkills.filter(skill =>
+      resumeSkills.includes(skill)
+    );
+
+    const missingSkills = requiredSkills.filter(skill =>
+      !resumeSkills.includes(skill)
+    );
+
+    const matchScore = Math.round(
+      (matchingSkills.length / requiredSkills.length) * 100
+    );
+
+    results.push({
+      role,
+      matchScore,
+      matchingSkills,
+      missingSkills,
+      explanation:
+        matchScore >= 80
+          ? "Excellent fit for this role based on core skill alignment."
+          : matchScore >= 60
+          ? `Good match. Improve skills like ${missingSkills.join(", ")} to strengthen profile.`
+          : `Partial match. Consider developing ${missingSkills.join(", ")} for better opportunities.`
+    });
+  }
+
+  // Sort highest match first
+  return results.sort((a, b) => b.matchScore - a.matchScore);
 };
 
-module.exports = { analyzeJobMatch, buildHeuristicMatch };
+module.exports = { analyzeJobMatch };

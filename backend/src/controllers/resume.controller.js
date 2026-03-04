@@ -38,24 +38,28 @@ const getResumeInsights = async (req, res) => {
   try {
     const { id } = req.params;
     const userId = getUserId(req);
+    // ✅ FIX: Check for refresh query parameter
+    const isRefresh = req.query.refresh === "true";
+    
     const resume = await Resume.findOne({ _id: id, userId });
     
     if (!resume) return res.status(404).json({ message: "Resume not found" });
 
-    // FIX: If insights already exist in DB, return them immediately (0.1s instead of 30s)
-    if (resume.aiInsights && resume.aiInsights.summary) {
+    // ✅ Return cached data ONLY if refresh is not requested
+    if (!isRefresh && resume.aiInsights && resume.aiInsights.summary) {
       return res.status(200).json(resume.aiInsights);
     }
 
-    // Call AI only if we don't have cached data
+    // Call AI Reasoning Engine
     const insights = await generateFullAnalysis(resume.extractedText, resume.predictedRole, resume.skillsDetected);
     
-    // Save the insights to the database for future instant access
+    // ✅ Overwrite the insights in the database
     resume.aiInsights = insights;
     await resume.save();
 
     res.status(200).json(insights);
   } catch (error) {
+    console.error("Controller Error:", error.message);
     res.status(500).json({ message: "AI Analysis failed", error: error.message });
   }
 };
@@ -63,7 +67,6 @@ const getResumeInsights = async (req, res) => {
 const getAllResumes = async (req, res) => {
   try {
     const userId = getUserId(req);
-    // This will now include the aiInsights in the list for the Dashboard to use
     const resumes = await Resume.find({ userId }).sort({ createdAt: -1 });
     res.status(200).json({ data: resumes });
   } catch (error) {

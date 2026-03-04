@@ -12,7 +12,6 @@ const AIInsights = () => {
   const location = useLocation();
   const navigate = useNavigate();
   
-  // ✅ State for Resume ID with persistence logic
   const [resumeId, setResumeId] = useState(location.state?.resumeId || localStorage.getItem("lastResumeId"));
   const [activeTab, setActiveTab] = useState("analysis");
   const [data, setData] = useState({
@@ -23,15 +22,16 @@ const AIInsights = () => {
     isExporting: false
   });
 
-  // ✅ Consolidated fetch logic to avoid multiple triggers
+  // ✅ Consolidated fetch logic with refresh support
   const fetchDeepAnalysis = useCallback(async (targetId, isRefresh = false) => {
     if (!targetId || targetId === "undefined") return;
 
     if (isRefresh) setData(prev => ({ ...prev, loading: true }));
     
     try {
-      // Hits the backend route you established in resume.routes.js
-      const response = await api.get(`/api/resume/insights/${targetId}`);
+      // ✅ Hits endpoint with ?refresh=true when re-analyze is clicked
+      const url = `/api/resume/insights/${targetId}${isRefresh ? "?refresh=true" : ""}`;
+      const response = await api.get(url);
 
       setData({
         summary: response.data.summary || "Summary unavailable.",
@@ -52,12 +52,10 @@ const AIInsights = () => {
     }
   }, []);
 
-  // ✅ Initialize ID and Data on Mount
   useEffect(() => {
     const initialize = async () => {
       let currentId = resumeId;
 
-      // If ID is missing, try to fetch the latest from the server
       if (!currentId || currentId === "undefined") {
         try {
           const res = await api.get("/api/resume/all");
@@ -67,7 +65,7 @@ const AIInsights = () => {
             setResumeId(currentId);
             localStorage.setItem("lastResumeId", currentId);
           } else {
-            navigate("/app/dashboard"); // Redirect if no resume exists
+            navigate("/app/dashboard");
             return;
           }
         } catch (err) {
@@ -79,7 +77,6 @@ const AIInsights = () => {
         localStorage.setItem("lastResumeId", currentId);
       }
 
-      // Fetch the actual analysis
       fetchDeepAnalysis(currentId);
     };
 
@@ -108,7 +105,7 @@ const AIInsights = () => {
   if (data.loading) return (
     <div className="h-[80vh] flex flex-col items-center justify-center space-y-4">
       <Loader2 className="animate-spin text-indigo-600" size={48} />
-      <p className="text-gray-400 font-black uppercase tracking-widest text-[10px] tracking-[0.2em]">Synthesizing AI Insights...</p>
+      <p className="text-gray-400 font-black uppercase tracking-widest text-[10px] tracking-[0.2em]">Synthesizing Fresh AI Insights...</p>
     </div>
   );
 

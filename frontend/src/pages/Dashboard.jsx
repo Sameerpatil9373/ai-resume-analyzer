@@ -4,30 +4,9 @@ import Card from "../components/ui/Card";
 import ProgressCircle from "../components/ui/ProgressCircle";
 import {
   FileText, Target, BarChart3, Zap, UploadCloud,
-  Loader2, ArrowRight, Info
+  Loader2, ArrowRight
 } from "lucide-react";
 import api from "../services/api";
-
-const ROLE_HINTS = [
-  { keyword: "mern", skills: ["javascript", "mongodb", "express", "react", "node.js", "rest", "api"] },
-  { keyword: "full stack", skills: ["html", "css", "javascript", "react", "node.js", "express", "api", "git"] },
-  { keyword: "fullstack", skills: ["html", "css", "javascript", "react", "node.js", "express", "api", "git"] },
-  { keyword: "ai", skills: ["python", "machine learning", "pandas"] },
-  { keyword: "ml", skills: ["python", "machine learning", "pandas"] }
-];
-
-const getInterpretedSkills = (text) => {
-  const lower = (text || "").toLowerCase();
-  const skills = new Set();
-
-  ROLE_HINTS.forEach(({ keyword, skills: impliedSkills }) => {
-    if (lower.includes(keyword)) {
-      impliedSkills.forEach((skill) => skills.add(skill));
-    }
-  });
-
-  return Array.from(skills);
-};
 
 const Dashboard = () => {
   const [resumeData, setResumeData] = useState(null);
@@ -38,10 +17,7 @@ const Dashboard = () => {
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  const interpretedSkills = useMemo(() => getInterpretedSkills(jobDescription), [jobDescription]);
-  const jdWordCount = jobDescription.trim() ? jobDescription.trim().split(/\s+/).length : 0;
-  const isShortPrompt = jdWordCount > 0 && jdWordCount < 10;
-
+  // Load latest resume on mount
   useEffect(() => {
     const loadLatest = async () => {
       try {
@@ -77,6 +53,7 @@ const Dashboard = () => {
       const savedResume = uploadRes.data.data;
       localStorage.setItem("lastResumeId", savedResume._id);
 
+      // Trigger immediate AI Analysis
       const insightsRes = await api.get(`/api/resume/insights/${savedResume._id}`);
 
       setResumeData({
@@ -95,31 +72,29 @@ const Dashboard = () => {
     }
   };
 
-  const handleJobMatch = async () => {
-    const currentId = resumeData?._id || localStorage.getItem("lastResumeId");
+ // Dashboard.jsx mein handleJobMatch function ke pass se ye check hata do:
+/* {isShortPrompt && ( ... )} */ 
 
-    if (!currentId || !jobDescription.trim()) {
-      alert("Please upload a resume and paste a job description first.");
-      return;
-    }
-
-    setIsMatching(true);
-    try {
-      const response = await api.post(`/api/resume/match`, {
-        resumeId: currentId,
-        jobDescription: jobDescription.trim()
-      });
-
-      if (response.data) {
-        setMatchResult(response.data);
-      }
-    } catch (error) {
-      console.error("Match failed:", error);
-      alert("AI matching failed. Try again in a moment.");
-    } finally {
-      setIsMatching(false);
-    }
-  };
+// Ensure handleJobMatch doesn't care about prompt length
+const handleJobMatch = async () => {
+  const currentId = resumeData?._id || localStorage.getItem("lastResumeId");
+  if (!currentId || !jobDescription.trim()) {
+    alert("Please upload a resume and enter a role.");
+    return;
+  }
+  setIsMatching(true);
+  try {
+    const response = await api.post(`/api/resume/match`, {
+      resumeId: currentId,
+      jobDescription: jobDescription.trim()
+    });
+    setMatchResult(response.data);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    setIsMatching(false);
+  }
+};
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 pb-10 px-4">
@@ -156,31 +131,13 @@ const Dashboard = () => {
           </div>
 
           <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm">
-            <h3 className="text-lg font-black mb-6 text-[#111322]">Job Matching (Optional)</h3>
+            <h3 className="text-lg font-black mb-6 text-[#111322]">Job Matching (Intelligent)</h3>
             <textarea
-              className="w-full p-6 rounded-[1.5rem] bg-gray-50/80 mb-4 outline-none min-h-[160px] font-medium border border-transparent focus:border-indigo-100 transition-all"
-              placeholder="Paste a detailed job description here (e.g. 'Looking for a MERN developer with 2 years of React experience...')"
+              className="w-full p-6 rounded-[1.5rem] bg-gray-50/80 mb-6 outline-none min-h-[160px] font-medium border border-transparent focus:border-indigo-100 transition-all"
+              placeholder="Enter a role (e.g. 'Backend Developer') or paste a full job description..."
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
             />
-
-            {isShortPrompt && (
-              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 font-semibold flex gap-2">
-                <Info size={14} className="shrink-0 mt-0.5" />
-                Short prompt detected. Add responsibilities, years of experience, and tool requirements for a better match explanation.
-              </div>
-            )}
-
-            {interpretedSkills.length > 0 && (
-              <div className="mb-6 rounded-xl border border-indigo-100 bg-indigo-50/40 p-4">
-                <p className="text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-2">Interpreted skills preview</p>
-                <div className="flex flex-wrap gap-2">
-                  {interpretedSkills.map((skill) => (
-                    <span key={skill} className="px-3 py-1 bg-white text-indigo-600 text-[10px] font-black rounded-lg border border-indigo-100 shadow-sm">{skill}</span>
-                  ))}
-                </div>
-              </div>
-            )}
 
             <button
               onClick={handleJobMatch}
@@ -204,16 +161,13 @@ const Dashboard = () => {
                   <div className="flex-1 flex flex-wrap gap-2">
                     {matchResult.matchingSkills?.length > 0 ? (
                       matchResult.matchingSkills.map((s) => <span key={s} className="px-3 py-1 bg-white text-emerald-600 text-[10px] font-black rounded-lg border border-emerald-100 shadow-sm">✓ {s}</span>)
-                    ) : <span className="text-gray-400 text-[10px] italic">No skill matches found.</span>}
+                    ) : <span className="text-gray-400 text-[10px] italic">Inferred from stack.</span>}
 
                     {matchResult.missingSkills?.map((s) => <span key={s} className="px-3 py-1 bg-white text-rose-500 text-[10px] font-black rounded-lg border border-rose-100 shadow-sm">× {s}</span>)}
                   </div>
                 </div>
-                {matchResult.source && (
-                  <p className="mt-4 text-[10px] uppercase tracking-widest text-indigo-500 font-black">Source: {matchResult.source}</p>
-                )}
                 {matchResult.explanation && (
-                  <p className="mt-3 text-[12px] text-gray-600 font-bold italic leading-relaxed">
+                  <p className="mt-6 text-[13px] text-gray-600 font-bold italic leading-relaxed border-l-2 border-emerald-200 pl-4">
                     {matchResult.explanation}
                   </p>
                 )}
