@@ -15,41 +15,29 @@ const { analyzeJobMatch } = require("../services/jobMatch.service");
 const getUserId = (req) =>
   req.user?.id ?? req.user?.userId ?? req.user?._id;
 
-
 /**
  * Upload Resume
  */
 exports.uploadResume = async (req, res) => {
   try {
-
     if (!req.file)
       return res.status(400).json({ message: "No file uploaded" });
 
     const userId = getUserId(req);
-
     const filePath = path.resolve(req.file.path);
-
     const extractedText = await parseResume(filePath);
 
     console.log("📄 Resume parsed");
-
 
     /**
      * Resume Validation
      */
     const resumeKeywords = [
-      "education",
-      "experience",
-      "skills",
-      "projects",
-      "certifications",
-      "internship",
-      "contact",
-      "linkedin"
+      "education", "experience", "skills", "projects",
+      "certifications", "internship", "contact", "linkedin"
     ];
 
     const textLower = extractedText.toLowerCase();
-
     const matchedKeywords = resumeKeywords.filter(keyword =>
       textLower.includes(keyword)
     );
@@ -60,14 +48,11 @@ exports.uploadResume = async (req, res) => {
       });
     }
 
-
     /**
      * AI Skill Detection
      */
     const detectedSkills = await analyzeSkillsAI(extractedText);
-
     console.log("🧠 Detected Skills:", detectedSkills);
-
 
     /**
      * Save Resume
@@ -82,7 +67,6 @@ exports.uploadResume = async (req, res) => {
       aiInsights: null
     });
 
-
     /**
      * Send response immediately (fast UX)
      */
@@ -91,16 +75,12 @@ exports.uploadResume = async (req, res) => {
       message: "Resume uploaded. AI analysis running..."
     });
 
-
     /**
      * Background AI Analysis
      */
     setTimeout(async () => {
-
       try {
-
         console.log("🚀 Starting background AI analysis...");
-
         const insights = await generateFullAnalysis(
           extractedText,
           savedResume.predictedRole,
@@ -113,106 +93,78 @@ exports.uploadResume = async (req, res) => {
         );
 
         console.log("✅ Background AI insights saved");
-
       } catch (error) {
-
         console.log("❌ Background AI generation failed:", error.message);
-
       }
-
     }, 2000);
 
   } catch (error) {
-
     console.log("❌ Resume upload error:", error.message);
-
     res.status(500).json({
       message: "Resume upload failed",
       error: error.message
     });
-
   }
 };
-
 
 /**
  * Get All Resumes
  */
 exports.getAllResumes = async (req, res) => {
   try {
-
     const userId = getUserId(req);
-
-    const resumes = await Resume.find({ userId })
-      .sort({ createdAt: -1 });
-
+    const resumes = await Resume.find({ userId }).sort({ createdAt: -1 });
     res.status(200).json({ data: resumes });
-
   } catch (error) {
-
     res.status(500).json({ error: error.message });
-
   }
 };
-
 
 /**
  * AI Insights
  */
 exports.getResumeInsights = async (req, res) => {
-
   try {
-
     const { id } = req.params;
-
     const refresh = req.query.refresh === "true";
-
     const userId = getUserId(req);
 
     console.log("📊 AI Insights Requested");
     console.log("Resume ID:", id);
 
-    const resume = await Resume.findOne({
-      _id: id,
-      userId
-    });
+    const resume = await Resume.findOne({ _id: id, userId });
 
     if (!resume)
       return res.status(404).json({ message: "Resume not found" });
 
+    // FIX: Much stronger check! Ensure summary actually has text inside it, not just an empty object from Mongoose.
+    const hasInsights = resume.aiInsights && resume.aiInsights.summary && resume.aiInsights.summary.trim().length > 0;
 
     /**
-     * If AI still running
+     * If AI still running (No summary text found)
      */
-    if (!resume.aiInsights && !refresh) {
-
+    if (!hasInsights && !refresh) {
+      console.log("⏳ AI is still processing, telling frontend to wait...");
       return res.status(200).json({
         summary: "",
         questions: [],
         explanation: "",
-        processing: true
+        processing: true // This keeps the loading circle ticking!
       });
-
     }
 
-
     /**
-     * Return cached insights
+     * Return cached insights if they are completely ready
      */
-    if (resume.aiInsights && !refresh) {
-
+    if (hasInsights && !refresh) {
       console.log("⚡ Returning cached AI insights");
-
       return res.status(200).json(resume.aiInsights);
-
     }
 
-
     /**
-     * Force refresh
+     * Force refresh (User clicked Re-Analyze)
      */
     console.log("🚀 Regenerating AI insights");
-
     const insights = await generateFullAnalysis(
       resume.extractedText,
       resume.predictedRole,
@@ -220,59 +172,47 @@ exports.getResumeInsights = async (req, res) => {
     );
 
     resume.aiInsights = insights;
-
     await resume.save();
 
     res.status(200).json(insights);
 
   } catch (error) {
-
     console.log("❌ AI Insights Error:", error.message);
-
     res.status(500).json({
       message: "AI analysis failed",
       error: error.message
     });
-
   }
-
 };
-
 
 /**
  * Market Job Matching
  */
 exports.matchResume = async (req, res) => {
   try {
-
-    const { resumeId } = req.body;
-
+    // FIX: Brought back the jobDescription extraction so the frontend matcher actually works!
+    const { resumeId, jobDescription } = req.body;
     const userId = getUserId(req);
 
-    const resume = await Resume.findOne({
-      _id: resumeId,
-      userId
-    });
+    const resume = await Resume.findOne({ _id: resumeId, userId });
 
     if (!resume)
       return res.status(404).json({ message: "Resume not found" });
 
     console.log("📄 Resume Skills:", resume.skillsDetected);
 
+    // Pass jobDescription to the service
     const results = await analyzeJobMatch(
       resume.extractedText,
-      resume.skillsDetected
+      resume.skillsDetected,
+      jobDescription 
     );
 
     console.log("🎯 Job Match Results:", results);
-
     res.status(200).json(results);
 
   } catch (error) {
-
     console.log("❌ Job Matching Error:", error.message);
-
     res.status(500).json({ error: error.message });
-
   }
 };

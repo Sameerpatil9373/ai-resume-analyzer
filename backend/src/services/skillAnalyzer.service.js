@@ -9,7 +9,10 @@ const COMMON_SKILLS = [
   "java","python","c++","bootstrap","git","github",
   "postman","rest api","docker","kubernetes","aws",
   "machine learning","tensorflow","pytorch","pandas",
-  "selenium","testing","automation","excel","tableau"
+  "selenium","testing","automation","excel","tableau",
+  // Added modern stack tools to fix missing detections
+  "prisma", "postgres", "postgresql", "tailwind", "sass", 
+  "typescript", "next.js", "firebase", "django", "flask", "php"
 ];
 
 /**
@@ -22,14 +25,11 @@ const STACK_MAP = {
   "data analyst": ["sql","excel","tableau"]
 };
 
-
 /**
  * Skill detection (dictionary + stack logic)
  */
 const analyzeSkillsAI = async (text) => {
-
   const lowerText = text.toLowerCase();
-
   let detectedSkills = [];
 
   /**
@@ -43,28 +43,36 @@ const analyzeSkillsAI = async (text) => {
 
   /**
    * Detect skills directly from resume text
+   * Improved matching: catch "React JS" and "Node JS" by removing spaces and dots
    */
-  const textSkills = COMMON_SKILLS.filter(skill =>
-    lowerText.includes(skill)
-  );
+  const cleanText = lowerText.replace(/[\s.]/g, "");
+  const textSkills = COMMON_SKILLS.filter(skill => {
+    const cleanSkill = skill.replace(/[\s.]/g, "");
+    return lowerText.includes(skill) || cleanText.includes(cleanSkill);
+  });
 
   detectedSkills.push(...textSkills);
 
   console.log("🧠 Detected Skills:", detectedSkills);
 
   return enforceImplicitLogic(detectedSkills);
-
 };
-
 
 /**
  * Skill normalization + logic
  */
 const enforceImplicitLogic = (skills) => {
-
   const normalized = uniqLower(
     skills.map(canonicalizeSkill)
   );
+
+  /**
+   * PROBLEM 3 FIX: React/Node implies JavaScript
+   */
+  const jsFoundations = ["react", "node", "node.js", "express", "next.js", "vue", "angular"];
+  if (normalized.some(s => jsFoundations.includes(s))) {
+    if (!normalized.includes("javascript")) normalized.push("javascript");
+  }
 
   /**
    * React implies frontend stack
@@ -77,66 +85,50 @@ const enforceImplicitLogic = (skills) => {
   /**
    * MySQL implies SQL
    */
-  if (normalized.includes("mysql") && !normalized.includes("sql")) {
-    normalized.push("sql");
+  if (normalized.includes("mysql") || normalized.includes("postgres")) {
+    if (!normalized.includes("sql")) normalized.push("sql");
   }
 
   return normalized.slice(0, 20);
-
 };
-
 
 /**
  * ATS Score calculation
  */
 const calculateATS = (skills, text) => {
-
   const finalSkills = enforceImplicitLogic(skills);
-
   let score = 40;
 
   if (finalSkills.length >= 8) score += 15;
-
   if (text.toLowerCase().includes("project")) score += 15;
-
   if (
     text.toLowerCase().includes("internship") ||
     text.toLowerCase().includes("experience")
   ) score += 15;
-
   if (text.toLowerCase().includes("education")) score += 10;
 
   return Math.min(score, 90);
-
 };
-
 
 /**
  * Role prediction
  */
 const predictRole = (skills) => {
-
   const s = enforceImplicitLogic(skills);
 
-  if (s.includes("react") && s.includes("node"))
+  if (s.includes("react") && (s.includes("node") || s.includes("node.js")))
     return "Full Stack Developer";
-
   if (s.includes("react"))
     return "Frontend Developer";
-
   if (s.includes("node") || s.includes("express"))
     return "Backend Developer";
-
   if (s.includes("testing") || s.includes("selenium"))
     return "Software Tester";
-
   if (s.includes("sql") && s.includes("excel"))
     return "Data Analyst";
 
   return "Software Developer";
-
 };
-
 
 module.exports = {
   analyzeSkillsAI,
