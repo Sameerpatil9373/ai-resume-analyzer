@@ -1,82 +1,146 @@
-const skillsList = require("../utils/skillsList");
-const {
-  normalizeTextForSkillMatch,
-  getCanonicalSkillVariants,
-  extractRoleImpliedSkills,
-  canonicalizeSkill,
-  uniqLower,
-} = require("../utils/skillNormalization");
+const { uniqLower, canonicalizeSkill } = require("../utils/skillNormalization");
 
-const analyzeSkills = (text) => {
-  const normalizedText = normalizeTextForSkillMatch(text || "");
-  const detected = new Set();
+/**
+ * Common technical skills dictionary
+ */
+const COMMON_SKILLS = [
+  "html","css","javascript","react","vue","angular",
+  "node","node.js","express","mongodb","mysql","sql",
+  "java","python","c++","bootstrap","git","github",
+  "postman","rest api","docker","kubernetes","aws",
+  "machine learning","tensorflow","pytorch","pandas",
+  "selenium","testing","automation","excel","tableau"
+];
 
-  skillsList.forEach((skill) => {
-    const variants = getCanonicalSkillVariants(skill);
-    variants.forEach((variant) => {
-      const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(`(?:^|\\s)${escaped}(?=$|\\s)`, "i");
-      if (regex.test(normalizedText)) {
-        detected.add(canonicalizeSkill(skill));
-      }
-    });
-  });
-
-  extractRoleImpliedSkills(text).forEach((skill) => detected.add(skill));
-
-  return Array.from(detected);
+/**
+ * Technology stack detection
+ */
+const STACK_MAP = {
+  "mern": ["mongodb","express","react","node","javascript"],
+  "software tester": ["testing","selenium","automation"],
+  "qa": ["testing","selenium","automation"],
+  "data analyst": ["sql","excel","tableau"]
 };
 
-const detectExperience = (text) => {
-  const lowerText = (text || "").toLowerCase();
-  return lowerText.includes("year") || lowerText.includes("experience") || lowerText.includes("worked at");
+
+/**
+ * Skill detection (dictionary + stack logic)
+ */
+const analyzeSkillsAI = async (text) => {
+
+  const lowerText = text.toLowerCase();
+
+  let detectedSkills = [];
+
+  /**
+   * Detect stacks like MERN
+   */
+  for (const stack in STACK_MAP) {
+    if (lowerText.includes(stack)) {
+      detectedSkills.push(...STACK_MAP[stack]);
+    }
+  }
+
+  /**
+   * Detect skills directly from resume text
+   */
+  const textSkills = COMMON_SKILLS.filter(skill =>
+    lowerText.includes(skill)
+  );
+
+  detectedSkills.push(...textSkills);
+
+  console.log("🧠 Detected Skills:", detectedSkills);
+
+  return enforceImplicitLogic(detectedSkills);
+
 };
 
-const detectEducation = (text) => {
-  const lowerText = (text || "").toLowerCase();
-  return lowerText.includes("bachelor") || lowerText.includes("master") || lowerText.includes("b.tech") || lowerText.includes("university") || lowerText.includes("degree");
+
+/**
+ * Skill normalization + logic
+ */
+const enforceImplicitLogic = (skills) => {
+
+  const normalized = uniqLower(
+    skills.map(canonicalizeSkill)
+  );
+
+  /**
+   * React implies frontend stack
+   */
+  if (normalized.includes("react")) {
+    if (!normalized.includes("html")) normalized.push("html");
+    if (!normalized.includes("css")) normalized.push("css");
+  }
+
+  /**
+   * MySQL implies SQL
+   */
+  if (normalized.includes("mysql") && !normalized.includes("sql")) {
+    normalized.push("sql");
+  }
+
+  return normalized.slice(0, 20);
+
 };
 
-const detectProjects = (text) => (text || "").toLowerCase().includes("project");
 
-const detectQualityKeywords = (text) => {
-  const lowerText = (text || "").toLowerCase();
-  const qualityWords = ["developed", "implemented", "designed", "optimized", "managed", "created"];
-  return qualityWords.filter((word) => lowerText.includes(word)).length;
-};
-
-const validateResumeStructure = (text) => {
-  const lowerText = (text || "").toLowerCase();
-  const hasSkills = lowerText.includes("skills") || lowerText.includes("technical");
-  const hasEducation = lowerText.includes("education") || lowerText.includes("bachelor") || lowerText.includes("degree");
-  const hasExperience = lowerText.includes("experience") || lowerText.includes("internship") || lowerText.includes("work");
-
-  return hasSkills || hasEducation || hasExperience;
-};
-
+/**
+ * ATS Score calculation
+ */
 const calculateATS = (skills, text) => {
-  const skillScore = Math.min((skills.length / skillsList.length) * 60, 60);
-  const structureScore = validateResumeStructure(text) ? 20 : 0;
-  const qualityScore = Math.min(detectQualityKeywords(text) * 2, 20);
 
-  return Math.round(skillScore + structureScore + qualityScore);
+  const finalSkills = enforceImplicitLogic(skills);
+
+  let score = 40;
+
+  if (finalSkills.length >= 8) score += 15;
+
+  if (text.toLowerCase().includes("project")) score += 15;
+
+  if (
+    text.toLowerCase().includes("internship") ||
+    text.toLowerCase().includes("experience")
+  ) score += 15;
+
+  if (text.toLowerCase().includes("education")) score += 10;
+
+  return Math.min(score, 90);
+
 };
 
+
+/**
+ * Role prediction
+ */
 const predictRole = (skills) => {
-  const normalizedSkills = uniqLower((skills || []).map(canonicalizeSkill));
 
-  if (normalizedSkills.includes("react") && normalizedSkills.includes("node.js")) return "Full Stack Developer";
-  if (normalizedSkills.includes("python") && normalizedSkills.includes("machine learning")) return "AI/ML Engineer";
-  if (normalizedSkills.includes("java") && normalizedSkills.includes("sql")) return "Backend Developer";
+  const s = enforceImplicitLogic(skills);
+
+  if (s.includes("react") && s.includes("node"))
+    return "Full Stack Developer";
+
+  if (s.includes("react"))
+    return "Frontend Developer";
+
+  if (s.includes("node") || s.includes("express"))
+    return "Backend Developer";
+
+  if (s.includes("testing") || s.includes("selenium"))
+    return "Software Tester";
+
+  if (s.includes("sql") && s.includes("excel"))
+    return "Data Analyst";
+
   return "Software Developer";
+
 };
+
 
 module.exports = {
-  analyzeSkills,
-  detectExperience,
-  detectEducation,
-  detectProjects,
+  analyzeSkillsAI,
   calculateATS,
   predictRole,
-  validateResumeStructure,
+  enforceImplicitLogic
 };

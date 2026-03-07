@@ -1,4 +1,6 @@
-import { useState, useRef, useEffect, useMemo } from "react";
+// frontend/src/pages/Dashboard.jsx refactor
+
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../components/ui/Card";
 import ProgressCircle from "../components/ui/ProgressCircle";
@@ -17,18 +19,20 @@ const Dashboard = () => {
   const fileInputRef = useRef(null);
   const navigate = useNavigate();
 
-  // Load latest resume on mount
+  // Load latest resume on mount with full AI context
   useEffect(() => {
     const loadLatest = async () => {
       try {
         const res = await api.get("/api/resume/all");
         if (res.data.data && res.data.data.length > 0) {
           const latest = res.data.data[0];
+          
+          // Ensure we fetch the latest AI insights to populate the dashboard summary
+          const insightsRes = await api.get(`/api/resume/insights/${latest._id}`);
+          
           setResumeData({
             ...latest,
-            summary: latest.aiInsights?.summary || "",
-            questions: latest.aiInsights?.questions || [],
-            explanation: latest.aiInsights?.explanation || ""
+            summary: insightsRes.data.summary || "",
           });
           localStorage.setItem("lastResumeId", latest._id);
         }
@@ -47,74 +51,71 @@ const Dashboard = () => {
     formData.append("resume", file);
 
     try {
+      // 1. Initial Upload & Skill Detection
       const uploadRes = await api.post("/api/resume/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" }
       });
       const savedResume = uploadRes.data.data;
       localStorage.setItem("lastResumeId", savedResume._id);
 
-      // Trigger immediate AI Analysis
+      // 2. Immediate Reasoning AI Synthesis for Dashboard Summary
       const insightsRes = await api.get(`/api/resume/insights/${savedResume._id}`);
 
       setResumeData({
         ...savedResume,
         summary: insightsRes.data.summary,
-        questions: insightsRes.data.questions,
-        explanation: insightsRes.data.explanation
       });
 
       setMatchResult(null);
       setJobDescription("");
     } catch (error) {
-      alert("Analysis failed. Check your API key or file format.");
+      alert("Analysis failed. Please check your file format or connection.");
     } finally {
       setIsUploading(false);
     }
   };
 
- // Dashboard.jsx mein handleJobMatch function ke pass se ye check hata do:
-/* {isShortPrompt && ( ... )} */ 
-
-// Ensure handleJobMatch doesn't care about prompt length
-const handleJobMatch = async () => {
-  const currentId = resumeData?._id || localStorage.getItem("lastResumeId");
-  if (!currentId || !jobDescription.trim()) {
-    alert("Please upload a resume and enter a role.");
-    return;
-  }
-  setIsMatching(true);
-  try {
-    const response = await api.post(`/api/resume/match`, {
-      resumeId: currentId,
-      jobDescription: jobDescription.trim()
-    });
-    setMatchResult(response.data);
-  } catch (error) {
-    console.error(error);
-  } finally {
-    setIsMatching(false);
-  }
-};
+  const handleJobMatch = async () => {
+    const currentId = resumeData?._id || localStorage.getItem("lastResumeId");
+    if (!currentId || !jobDescription.trim()) {
+      alert("Please upload a resume and enter a role.");
+      return;
+    }
+    setIsMatching(true);
+    try {
+      // Hits the refactored dynamic matching endpoint
+      const response = await api.post(`/api/resume/match`, {
+        resumeId: currentId,
+        jobDescription: jobDescription.trim()
+      });
+      // Handle array or single object response from dynamic matcher
+      setMatchResult(Array.isArray(response.data) ? response.data[0] : response.data);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsMatching(false);
+    }
+  };
 
   return (
     <div className="max-w-[1600px] mx-auto space-y-8 pb-10 px-4">
       <div className="flex justify-between items-center mt-6">
-        <h2 className="text-3xl font-black text-[#111322]">Dashboard</h2>
+        <h2 className="text-3xl font-black text-[#111322]">AI Dashboard</h2>
         {resumeData && (
           <button
             onClick={() => navigate("/app/insights", { state: { resumeId: resumeData._id } })}
             className="flex items-center gap-2 text-indigo-600 font-black text-sm hover:translate-x-1 transition-transform"
           >
-            Full AI Report <ArrowRight size={18} />
+            Full Reasoning Report <ArrowRight size={18} />
           </button>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <Card title="ATS Score" value={resumeData ? `${resumeData.atsScore}%` : "0%"} icon={BarChart3} />
-        <Card title="Skills" value={resumeData ? resumeData.skillsDetected.length : "0"} icon={FileText} />
-        <Card title="Match Score" value={matchResult ? `${matchResult.matchScore}%` : "0%"} icon={Target} />
-        <Card title="AI Status" value={resumeData?.summary ? "Active" : "Ready"} icon={Zap} />
+        <Card title="Detected Skills" value={resumeData ? resumeData.skillsDetected.length : "0"} icon={FileText} />
+        <Card title="Market Match" value={matchResult ? `${matchResult.matchScore}%` : "0%"} icon={Target} />
+        <Card title="AI Reasoning" value={resumeData?.summary ? "Active" : "Idle"} icon={Zap} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
@@ -126,15 +127,15 @@ const handleJobMatch = async () => {
               className="border-2 border-dashed rounded-[2rem] p-12 text-center border-indigo-100 bg-indigo-50/20 cursor-pointer hover:bg-indigo-50/40 transition-all"
             >
               {isUploading ? <Loader2 className="animate-spin mx-auto mb-4 text-indigo-600" /> : <UploadCloud size={32} className="mx-auto mb-4 text-indigo-600" />}
-              <p className="text-xl font-bold">{isUploading ? "AI is processing..." : "Upload New Resume"}</p>
+              <p className="text-xl font-bold">{isUploading ? "Reasoning AI is processing..." : "Upload New Resume"}</p>
             </div>
           </div>
 
           <div className="bg-white rounded-[2.5rem] p-10 border border-gray-100 shadow-sm">
-            <h3 className="text-lg font-black mb-6 text-[#111322]">Job Matching (Intelligent)</h3>
+            <h3 className="text-lg font-black mb-6 text-[#111322]">Dynamic Job Matching</h3>
             <textarea
               className="w-full p-6 rounded-[1.5rem] bg-gray-50/80 mb-6 outline-none min-h-[160px] font-medium border border-transparent focus:border-indigo-100 transition-all"
-              placeholder="Enter a role (e.g. 'Backend Developer') or paste a full job description..."
+              placeholder="Enter a target role or paste a job description..."
               value={jobDescription}
               onChange={(e) => setJobDescription(e.target.value)}
             />
@@ -148,7 +149,7 @@ const handleJobMatch = async () => {
                   : "bg-indigo-600 text-white hover:bg-indigo-700 active:scale-[0.98]"
               }`}
             >
-              {isMatching ? "Analysing Match..." : "Run AI Matcher"}
+              {isMatching ? "Executing AI Match..." : "Run Reasoning Matcher"}
             </button>
 
             {matchResult && (
@@ -159,18 +160,17 @@ const handleJobMatch = async () => {
                     <p className="text-[10px] text-emerald-600/60 font-black uppercase mt-2 tracking-widest">Match Score</p>
                   </div>
                   <div className="flex-1 flex flex-wrap gap-2">
-                    {matchResult.matchingSkills?.length > 0 ? (
-                      matchResult.matchingSkills.map((s) => <span key={s} className="px-3 py-1 bg-white text-emerald-600 text-[10px] font-black rounded-lg border border-emerald-100 shadow-sm">✓ {s}</span>)
-                    ) : <span className="text-gray-400 text-[10px] italic">Inferred from stack.</span>}
-
-                    {matchResult.missingSkills?.map((s) => <span key={s} className="px-3 py-1 bg-white text-rose-500 text-[10px] font-black rounded-lg border border-rose-100 shadow-sm">× {s}</span>)}
+                    {matchResult.matchingSkills?.slice(0, 8).map((s) => (
+                      <span key={s} className="px-3 py-1 bg-white text-emerald-600 text-[10px] font-black rounded-lg border border-emerald-100 shadow-sm">✓ {s}</span>
+                    ))}
+                    {matchResult.missingSkills?.slice(0, 5).map((s) => (
+                      <span key={s} className="px-3 py-1 bg-white text-rose-500 text-[10px] font-black rounded-lg border border-rose-100 shadow-sm">× {s}</span>
+                    ))}
                   </div>
                 </div>
-                {matchResult.explanation && (
-                  <p className="mt-6 text-[13px] text-gray-600 font-bold italic leading-relaxed border-l-2 border-emerald-200 pl-4">
-                    {matchResult.explanation}
-                  </p>
-                )}
+                <p className="mt-6 text-[13px] text-gray-600 font-bold italic leading-relaxed border-l-2 border-emerald-200 pl-4 whitespace-pre-line">
+                  {matchResult.explanation}
+                </p>
               </div>
             )}
           </div>
@@ -187,7 +187,7 @@ const handleJobMatch = async () => {
             </div>
             <div className="mt-8 w-full border-t pt-8">
               <div className="flex justify-between items-center">
-                <span className="text-gray-400 font-black text-[10px] uppercase tracking-widest">Predicted Role</span>
+                <span className="text-gray-400 font-black text-[10px] uppercase tracking-widest">Market Predicted Role</span>
                 <span className="text-indigo-600 font-black italic text-sm">{resumeData ? resumeData.predictedRole : "Not Analyzed"}</span>
               </div>
             </div>
@@ -198,7 +198,7 @@ const handleJobMatch = async () => {
               <h3 className="text-lg font-black flex items-center gap-3 mb-6">
                 <Zap size={22} className="text-indigo-400" fill="currentColor" /> Executive AI Summary
               </h3>
-              <p className="text-[14px] leading-relaxed font-medium italic text-gray-300 border-l-2 border-indigo-500/50 pl-6">
+              <p className="text-[14px] leading-relaxed font-medium italic text-gray-300 border-l-2 border-indigo-500/50 pl-6 whitespace-pre-line">
                 {resumeData.summary}
               </p>
             </div>

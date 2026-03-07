@@ -1,137 +1,138 @@
-const { analyzeSkills } = require("./skillAnalyzer.service");
-const { canonicalizeSkill, uniqLower } = require("../utils/skillNormalization");
+const analyzeJobMatch = async (resumeText, skills) => {
 
-/*
-  Predefined Industry Role Templates
-  You can expand this later if needed
-*/
-const roleTemplates = {
-  "Backend Developer": [
-    "nodejs", "express", "mongodb", "api", "jwt",
-    "database", "rest", "authentication", "deployment"
-  ],
+  // Normalize resume skills
+  let resumeSkills = skills.map(s => s.toLowerCase());
 
-  "Frontend Developer": [
-    "react", "javascript", "html", "css",
-    "redux", "responsive design", "hooks"
-  ],
+  /**
+   * Smart Skill Inference
+   * If certain skills exist, infer related skills automatically
+   */
 
-  "Full Stack Developer": [
-    "react", "nodejs", "mongodb", "express",
-    "javascript", "api", "deployment"
-  ],
-
-  "Java Developer": [
-    "java", "spring", "hibernate",
-    "rest", "microservices"
-  ],
-
-  "Python Developer": [
-    "python", "django", "flask",
-    "api", "database"
-  ],
-
-  "Software Tester": [
-    "testing", "selenium",
-    "automation", "jira", "test cases"
-  ],
-
-  "AI / ML Engineer": [
-    "python", "machine learning",
-    "tensorflow", "pandas", "data science"
-  ],
-
-  "Cyber Security Analyst": [
-    "cyber security",
-    "network security",
-    "penetration testing",
-    "firewall"
-  ]
-};
-
-const analyzeJobMatch = async (resumeText, jobDescription) => {
-  const resumeSkills = uniqLower(
-    analyzeSkills(resumeText).map(canonicalizeSkill)
-  );
-
-  // 🔥 CASE 1 — If user provides job description
-  if (jobDescription && jobDescription.trim().length > 10) {
-    const jobSkills = uniqLower(
-      analyzeSkills(jobDescription).map(canonicalizeSkill)
-    );
-
-    if (!jobSkills.length) {
-      return [
-        {
-          role: "Custom Role",
-          matchScore: 0,
-          matchingSkills: [],
-          missingSkills: [],
-          explanation: "Job description too short. Add required skills."
-        }
-      ];
+  // Node + Express → API
+  if (
+    resumeSkills.includes("node") ||
+    resumeSkills.includes("node.js")
+  ) {
+    if (resumeSkills.includes("express") && !resumeSkills.includes("api")) {
+      resumeSkills.push("api");
     }
-
-    const matchingSkills = jobSkills.filter(skill =>
-      resumeSkills.includes(skill)
-    );
-
-    const missingSkills = jobSkills.filter(skill =>
-      !resumeSkills.includes(skill)
-    );
-
-    const matchScore = Math.round(
-      (matchingSkills.length / jobSkills.length) * 100
-    );
-
-    return [
-      {
-        role: "Custom Role",
-        matchScore,
-        matchingSkills,
-        missingSkills,
-        explanation: `
-You are ${matchScore}% aligned with this role.
-To improve your profile, focus on: ${missingSkills.join(", ") || "No major gaps detected"}.
-`
-      }
-    ];
   }
 
-  // 🔥 CASE 2 — No JD → Auto-match with predefined roles
+  // React + JS → Frontend capability
+  if (
+    resumeSkills.includes("react") &&
+    resumeSkills.includes("javascript")
+  ) {
+    resumeSkills.push("frontend");
+  }
+
+  // Python + Pandas → Data science related
+  if (
+    resumeSkills.includes("python") &&
+    resumeSkills.includes("pandas")
+  ) {
+    resumeSkills.push("data analysis");
+  }
+
+
+  const roleTemplates = {
+
+    "Frontend Developer": [
+      "html","css","javascript","react","vue","angular"
+    ],
+
+    "Backend Developer": [
+      "node","express","mongodb","sql","api"
+    ],
+
+    "Full Stack Developer": [
+      "react","node","express","mongodb","javascript"
+    ],
+
+    "Software Tester": [
+      "testing","automation","selenium","test"
+    ],
+
+    "AI / ML Engineer": [
+      "python","machine learning","tensorflow","pytorch"
+    ],
+
+    "Data Scientist": [
+      "python","pandas","numpy","machine learning"
+    ],
+
+    "Data Analyst": [
+      "sql","excel","tableau","power bi"
+    ],
+
+    "Cyber Security Analyst": [
+      "cyber","penetration","firewall","security"
+    ],
+
+    "DevOps Engineer": [
+      "docker","kubernetes","aws","ci","cd"
+    ],
+
+    "Java Developer": [
+      "java","spring","hibernate"
+    ],
+
+    "Python Developer": [
+      "python","django","flask"
+    ]
+
+  };
+
+
   const results = [];
 
   for (const role in roleTemplates) {
-    const requiredSkills = roleTemplates[role];
 
-    const matchingSkills = requiredSkills.filter(skill =>
-      resumeSkills.includes(skill)
+    const roleSkills = roleTemplates[role];
+
+    const matchingSkills = roleSkills.filter(skill =>
+      resumeSkills.some(s =>
+        s.includes(skill) || skill.includes(s)
+      )
     );
 
-    const missingSkills = requiredSkills.filter(skill =>
-      !resumeSkills.includes(skill)
+    const missingSkills = roleSkills.filter(skill =>
+      !resumeSkills.some(s =>
+        s.includes(skill) || skill.includes(s)
+      )
     );
 
-    const matchScore = Math.round(
-      (matchingSkills.length / requiredSkills.length) * 100
-    );
+    const matchScore =
+      roleSkills.length > 0
+        ? Math.round(
+            (matchingSkills.length /
+              (matchingSkills.length + missingSkills.length)) * 100
+          )
+        : 0;
 
-    results.push({
-      role,
-      matchScore,
-      matchingSkills,
-      missingSkills,
-      explanation:
-        matchScore >= 80
-          ? "Excellent fit for this role based on core skill alignment."
-          : matchScore >= 60
-          ? `Good match. Improve skills like ${missingSkills.join(", ")} to strengthen profile.`
-          : `Partial match. Consider developing ${missingSkills.join(", ")} for better opportunities.`
-    });
+    if (matchScore >= 30) {
+
+      results.push({
+        role,
+        matchScore,
+        matchingSkills,
+        missingSkills,
+        explanation:
+          matchScore >= 80
+            ? "Strong alignment with required skills."
+            : matchScore >= 50
+            ? "Partial alignment. Improve missing skills."
+            : "Low alignment. Consider learning missing skills."
+      });
+
+    }
+
   }
 
-  // Sort highest match first
-  return results.sort((a, b) => b.matchScore - a.matchScore);
+  return results
+    .sort((a,b) => b.matchScore - a.matchScore)
+    .slice(0,5);
+
 };
 
 module.exports = { analyzeJobMatch };
