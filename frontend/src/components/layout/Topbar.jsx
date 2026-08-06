@@ -6,7 +6,7 @@ const Topbar = ({ onToggleSidebar }) => {
   const [isOpen, setIsOpen] = useState(false);
   const dropdownRef = useRef(null);
   const navigate = useNavigate();
-  const user = JSON.parse(localStorage.getItem("user"))?.user || { name: "Sameer Patil", email: "sameer@example.com" };
+  const user = JSON.parse(localStorage.getItem("user"))?.user || { name: "Guest User", email: "abc@example.com" };
 
   const today = new Date().toLocaleDateString('en-US', { 
     weekday: 'short', 
@@ -55,7 +55,7 @@ const Topbar = ({ onToggleSidebar }) => {
             onClick={() => setIsOpen(!isOpen)}
             className="w-9 h-9 sm:w-10 sm:h-10 bg-gradient-to-tr from-indigo-500 to-purple-600 text-white flex items-center justify-center rounded-full font-black text-[10px] sm:text-xs shadow-lg shadow-indigo-200 ring-2 ring-white transition-all hover:scale-105 cursor-pointer relative group"
           >
-            {user.name?.split(' ').map(n => n[0]).join('').toUpperCase() || "SP"}
+            {user.name?.split(' ').map(n => n[0]).join('').toUpperCase() || "GU"}
             <div className="absolute -bottom-1 -right-1 w-3.5 h-3.5 sm:w-4 sm:h-4 bg-white rounded-full flex items-center justify-center shadow-sm border border-gray-50">
               <ChevronDown size={8} className={`text-gray-400 sm:size-[10px] transition-transform duration-300 ${isOpen ? "rotate-180" : ""}`} />
             </div>
