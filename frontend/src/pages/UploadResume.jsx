@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
@@ -15,13 +15,14 @@ import api from "../services/api";
 import Modal from "../components/ui/Modal";
 import Button from "../components/ui/Button";
 
+
 const UploadResume = () => {
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
   const isAuthenticated = !!localStorage.getItem("user");
-
   const [isUploading, setIsUploading] = useState(false);
   const [aiProcessing, setAiProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [error, setError] = useState("");
   const [uploadedResume, setUploadedResume] = useState(null);
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
@@ -108,6 +109,8 @@ const UploadResume = () => {
     e.preventDefault();
     setIsDragging(false);
     if (isUploading || aiProcessing) return;
+
+    
     
     if (!isAuthenticated) {
       handleGuestAttempt();
@@ -126,7 +129,21 @@ const UploadResume = () => {
     }
     fileInputRef.current?.click();
   };
+useEffect(() => {
+  if (!aiProcessing) {
+    setProgress(0);
+    return;
+  }
 
+  const interval = setInterval(() => {
+    setProgress((prev) => {
+      if (prev >= 99) return 99;
+      return prev + Math.floor(Math.random() * 5) + 2;
+    });
+  }, 200);
+
+  return () => clearInterval(interval);
+}, [aiProcessing]);
   return (
     <div className="min-h-screen bg-slate-50 pt-8 pb-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-5xl mx-auto space-y-6">
@@ -338,7 +355,17 @@ const UploadResume = () => {
                   </div>
                   <h3 className="text-sm font-semibold text-slate-900">AI Reports</h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    {aiProcessing ? "Analyzing data..." : "Analysis complete"}
+                    {aiProcessing
+  ? `Analyzing Resume... ${progress}%`
+  : "Analysis Complete ✅"}
+  {aiProcessing && (
+  <div className="w-full bg-slate-200 rounded-full h-2 mt-3 overflow-hidden">
+    <div
+      className="bg-gradient-to-r from-purple-500 to-indigo-500 h-2 transition-all duration-300"
+      style={{ width: `${progress}%` }}
+    />
+  </div>
+)}
                   </p>
                 </div>
 
